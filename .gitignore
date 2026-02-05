@@ -1,0 +1,6 @@
+.vs/*
+Examples/TestApp/.vs/*
+Examples/TestApp/bin/Debug/*
+Examples/TestApp/obj/*
+MAX.Bot/bin/*
+MAX.Bot/obj/*
