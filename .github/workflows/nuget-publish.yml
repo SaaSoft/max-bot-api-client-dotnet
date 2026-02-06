@@ -43,6 +43,13 @@ jobs:
         # Ищем csproj файл
         CSPROJ_FILE=$(find . -name "*.csproj" -type f | head -1)
         
+        # Находим ВСЕ csproj файлы
+        ALL_CSPROJ=$(find . -name "*.csproj" -type f)
+        echo "All csproj files found:"
+        echo "$ALL_CSPROJ"
+        echo "$CSPROJ_FILE"
+        echo ""  
+
         if [ -z "$CSPROJ_FILE" ]; then
           echo "ERROR: No .csproj file found!"
           exit 1
