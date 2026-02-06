@@ -31,7 +31,9 @@ jobs:
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
-    
+    - name: Checkout
+      uses: actions/checkout@v4
+
     - name: Check folder
       run: pwd
 
