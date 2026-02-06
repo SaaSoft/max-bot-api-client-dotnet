@@ -36,6 +36,17 @@ jobs:
     
     - name: Check folder
       run: pwd
+
+    - name: Find and restore project
+      id: find_project
+      run: |
+        # Ищем csproj файл
+        CSPROJ_FILE=$(find . -name "*.csproj" -type f | head -1)
+        
+        if [ -z "$CSPROj_FILE" ]; then
+          echo "ERROR: No .csproj file found!"
+          exit 1
+        fi
       
     - name: Build project
       run: dotnet build ${{ env.PROJECT_PATH }} --configuration ${{ env.BUILD_CONFIGURATION }}
