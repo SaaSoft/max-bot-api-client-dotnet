@@ -40,6 +40,8 @@ jobs:
     - name: Find and restore project
       id: find_project
       run: |
+        ls
+
         # Ищем csproj файл
         CSPROJ_FILE=$(find . -name "*.csproj" -type f | head -1)
         
