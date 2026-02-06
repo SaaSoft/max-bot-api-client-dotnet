@@ -41,7 +41,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: nuget-packages
-        path: ../Examples/Releases/*.nupkg
+        path: ${{ github.workspace }}/Examples/Releases/*.nupkg
         retention-days: 7
 
   # =================== ШАГ 2: ПУБЛИКАЦИЯ В NUGET.ORG ===================
