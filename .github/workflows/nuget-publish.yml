@@ -36,12 +36,9 @@ jobs:
     
     - name: Check folder
       run: pwd
-
-    - name: Restore dependencies
-      run: dotnet restore ${{ env.PROJECT_PATH }}
       
     - name: Build project
-      run: dotnet build ${{ env.PROJECT_PATH }} --configuration ${{ env.BUILD_CONFIGURATION }} --no-restore
+      run: dotnet build ${{ env.PROJECT_PATH }} --configuration ${{ env.BUILD_CONFIGURATION }}
     
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
