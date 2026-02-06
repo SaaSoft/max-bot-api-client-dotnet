@@ -60,6 +60,60 @@ jobs:
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
     
+    - name: Debug NuGet configuration
+      run: |
+        echo "=== NUGET DEBUG INFORMATION ==="
+        echo ""
+        
+        # Версия dotnet и NuGet
+        echo "1. .NET SDK Version:"
+        dotnet --version
+        echo ""
+        
+        # Все доступные команды NuGet
+        echo "2. NuGet CLI info:"
+        dotnet nuget --version
+        echo ""
+        
+        # Текущие источники пакетов
+        echo "3. Current NuGet sources:"
+        dotnet nuget list source
+        echo ""
+        
+        # Глобальный конфигурационный файл
+        echo "4. Global NuGet config:"
+        cat ~/.nuget/NuGet/NuGet.Config 2>/dev/null || echo "No global config found"
+        echo ""
+        
+        # Конфигурация пользователя
+        echo "5. User NuGet config:"
+        cat ~/.config/NuGet/NuGet.Config 2>/dev/null || echo "No user config found"
+        echo ""
+        
+        # Конфигурация проекта (если есть)
+        echo "6. Project NuGet config:"
+        find . -name "nuget.config" -type f | head -3 | while read file; do
+          echo "Found: $file"
+          cat "$file"
+          echo ""
+        done
+        echo ""
+        
+        # Переменные окружения NuGet
+        echo "7. NuGet environment variables:"
+        env | grep -i nuget || echo "No NuGet env vars found"
+        echo ""
+        
+        # Проверка доступности источников
+        echo "8. Testing source connectivity:"
+        dotnet nuget list source --format detailed
+        echo ""
+        
+        # Проверка кэша
+        echo "9. NuGet cache locations:"
+        dotnet nuget locals all --list
+        echo "======================"
+
     - name: Publish to NuGet.org
       run: |
         echo "Publishing packages to NuGet.org..."
