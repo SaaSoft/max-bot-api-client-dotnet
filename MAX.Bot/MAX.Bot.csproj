@@ -21,7 +21,8 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<None Include="README.md" Pack="true" PackagePath="" />
+		<!-- Явно указываем путь к README -->
+		<None Include="..\README.md" Pack="true" PackagePath="\" />
 	</ItemGroup>
 	
 	<ItemGroup>
