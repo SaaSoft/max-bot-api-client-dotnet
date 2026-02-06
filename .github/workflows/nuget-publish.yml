@@ -131,9 +131,11 @@ jobs:
         
         # Публикуем пакет
         dotnet nuget push "$PACKAGE_FILE" \
-          --source "https://api.nuget.org/v3/index.json" \
+          --source "nuget.org" \
           --api-key "${{ secrets.NUGET_API_KEY }}" \
           --skip-duplicate \
+          --no-symbols \
+          --disable-buffering \
           --timeout 300
         
         if [ $? -eq 0 ]; then
