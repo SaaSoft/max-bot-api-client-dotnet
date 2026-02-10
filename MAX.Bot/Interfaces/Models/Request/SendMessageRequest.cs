@@ -42,5 +42,5 @@ public record SendMessageRequest
     /// Форматирование текста сообщения
     /// </summary>
     [JsonPropertyName("format")]
-    public string? Format { get; set; }
+    public MessageFormat? Format { get; set; }
 }
