@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    branches: [ main ]
   # Ручной запуск из интерфейса GitHub
   workflow_dispatch:
 
