@@ -1,5 +1,6 @@
 ﻿using MAX.Bot.Extensions;
 using MAX.Bot.Interfaces;
+//using MAX.Bot.Interfaces.Models;
 using MAX.Bot.Interfaces.Models.Request;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -20,7 +21,7 @@ try
     {
         ChatId = -70581633278133,
         Text = "Отправка сообщения",
-        Format = "markdown",
+        Format = MessageFormat.Markdown,
     });
 
     Console.WriteLine("Вызываем GetMessagesAsync...");
