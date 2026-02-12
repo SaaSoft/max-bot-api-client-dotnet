@@ -10,7 +10,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.2" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.2" />
-	<PackageReference Include="SaaSoft.MAX.Bot" Version="1.0.4" />
+	<PackageReference Include="SaaSoft.MAX.Bot" Version="1.0.5" />
   </ItemGroup>
 	
 </Project>

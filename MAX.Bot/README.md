@@ -22,7 +22,7 @@ dotnet add package SaaSoft.MAX.Bot
 
 ### Через PackageReference
 ```xml
-<PackageReference Include="SaaSoft.MAX.Bot" Version="1.0.4" />
+<PackageReference Include="SaaSoft.MAX.Bot" Version="1.0.5" />
 ```
 
 ## Быстрый старт

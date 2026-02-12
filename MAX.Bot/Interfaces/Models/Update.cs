@@ -31,6 +31,18 @@ public record Update
     /// </summary>
     [JsonPropertyName("user_locale")]
     public string? UserLocale { get; set; }
+
+    /// <summary>
+    /// Дополнительные данные из дип-линков, переданные при запуске бота
+    /// </summary>
+    [JsonPropertyName("payload")]
+    public string? Payload { get; set; }
+
+    /// <summary>
+    /// Пользователь
+    /// </summary>
+    [JsonPropertyName("user")]
+    public User? User { get; set; }
 }
 
 /// <summary>

@@ -6,7 +6,7 @@
 		<Nullable>enable</Nullable>
 		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 		<PackageId>SaaSoft.MAX.Bot</PackageId>
-		<Version>1.0.4</Version>
+		<Version>1.0.5</Version>
 		<Company>SaaSoft</Company>
 		<Description>C# клиент для Max Bot API</Description>
 		<PackageTags>maxbot;api;client;chatbot;messenger</PackageTags>
