@@ -1,5 +1,4 @@
-using System.Text.Json.Serialization;
-using MAX.Bot.Interfaces.Models.Request.Message.Attachment;
+namespace MAX.Bot.Interfaces.Models.Request.Message.Attachment.Payloads;
 
 /// <summary>
 /// Это информация, которую вы получите, как только аудио/видео будет загружено

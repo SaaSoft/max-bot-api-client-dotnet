@@ -51,7 +51,7 @@ public record GetMessagesRequest
         if (hasChatId == hasMessageIds)
             throw new ArgumentException("Нужно указать ровно один параметр: chat_id или message_ids.");
 
-        if (MessageIds != null && MessageIds.Any(string.IsNullOrWhiteSpace))
+        if (MessageIds != null && MessageIds.Exists(string.IsNullOrWhiteSpace))
             throw new ArgumentException("message_ids не должен содержать пустые идентификаторы.", nameof(MessageIds));
 
         if (Count is < 1 or > 100)

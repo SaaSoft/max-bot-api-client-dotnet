@@ -1,5 +1,4 @@
-using System.Text.Json.Serialization;
-using MAX.Bot.Interfaces.Models.Request.Message.Attachment;
+namespace MAX.Bot.Interfaces.Models.Request.Message.Attachment.Payloads;
 
 public sealed class ContactPayload : AttachmentPayload
 {

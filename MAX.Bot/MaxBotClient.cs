@@ -1,7 +1,4 @@
 ﻿using System.Globalization;
-using System.Text;
-using System.Text.Json;
-using System.Web;
 using System.Net.Http.Headers;
 using MAX.Bot.Exceptions;
 using MAX.Bot.Interfaces;
@@ -9,6 +6,7 @@ using MAX.Bot.Interfaces.Models;
 using MAX.Bot.Interfaces.Models.Request;
 using MAX.Bot.Interfaces.Models.Request.Message;
 using MAX.Bot.Interfaces.Models.Response;
+using static MAX.Bot.FrameworkSpecificMethods;
 
 namespace MAX.Bot;
 
@@ -50,7 +48,7 @@ public class MaxBotClient : IMaxBotClient
         var requestUri = new Uri(_httpClient.BaseAddress!, endpoint);
         var request = new HttpRequestMessage(method, requestUri);
 
-        if (data != null && (method == HttpMethod.Post || method == HttpMethod.Put || method == HttpMethod.Patch))
+        if (data != null && (method == HttpMethod.Post || method == HttpMethod.Put || method == HttpMethod_Patch))
         {
             var json = JsonSerializer.Serialize(data, new JsonSerializerOptions
             {
@@ -107,19 +105,19 @@ public class MaxBotClient : IMaxBotClient
         AnswerCallbackRequest request,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException_ThrowIfNull(request);
         request.Validate();
 
         return await SendRequestAsync<BaseResponse>(
             HttpMethod.Post,
-            $"/answers?callback_id={HttpUtility.UrlEncode(request.CallbackId)}",
+            $"/answers?callback_id={HttpUtility_UrlEncode(request.CallbackId)}",
             request,
             cancellationToken);
     }
 
     public async Task<GetMessagesResponse> GetMessagesAsync(GetMessagesRequest request, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException_ThrowIfNull(request);
         request.Validate();
 
         var queryParams = new Dictionary<string, string>();
@@ -140,7 +138,7 @@ public class MaxBotClient : IMaxBotClient
             queryParams["to"] = request.To.Value.ToString();
 
         var queryString = queryParams.Any()
-            ? "?" + string.Join("&", queryParams.Select(kvp => $"{kvp.Key}={HttpUtility.UrlEncode(kvp.Value)}"))
+            ? "?" + string.Join("&", queryParams.Select(kvp => $"{kvp.Key}={HttpUtility_UrlEncode(kvp.Value)}"))
             : "";
 
         return await SendRequestAsync<GetMessagesResponse>(HttpMethod.Get, $"/messages{queryString}", null, cancellationToken);
@@ -187,7 +185,7 @@ public class MaxBotClient : IMaxBotClient
             queryParams["marker"] = request.Marker.Value.ToString();
 
         var queryString = queryParams.Any()
-            ? "?" + string.Join("&", queryParams.Select(kvp => $"{kvp.Key}={HttpUtility.UrlEncode(kvp.Value)}"))
+            ? "?" + string.Join("&", queryParams.Select(kvp => $"{kvp.Key}={HttpUtility_UrlEncode(kvp.Value)}"))
             : "";
 
         return await SendRequestAsync<GetChatsResponse>(HttpMethod.Get, $"/chats{queryString}", null, cancellationToken);
@@ -204,11 +202,11 @@ public class MaxBotClient : IMaxBotClient
 
     public async Task<Chat> UpdateChatAsync(long chatId, UpdateChatRequest request, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException_ThrowIfNull(request);
         request.Validate();
 
         return await SendRequestAsync<Chat>(
-            HttpMethod.Patch,
+            HttpMethod_Patch,
             $"/chats/{chatId.ToString(CultureInfo.InvariantCulture)}",
             request,
             cancellationToken);
@@ -228,7 +226,7 @@ public class MaxBotClient : IMaxBotClient
         SendChatActionRequest request,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException_ThrowIfNull(request);
         request.Validate();
 
         return await SendRequestAsync<BaseResponse>(
@@ -254,7 +252,7 @@ public class MaxBotClient : IMaxBotClient
         PinChatMessageRequest request,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException_ThrowIfNull(request);
         request.Validate();
 
         return await SendRequestAsync<BaseResponse>(
@@ -313,7 +311,7 @@ public class MaxBotClient : IMaxBotClient
         AddChatAdminsRequest request,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException_ThrowIfNull(request);
         request.Validate();
 
         return await SendRequestAsync<BaseResponse>(
@@ -352,7 +350,7 @@ public class MaxBotClient : IMaxBotClient
             queryParams["count"] = request.Count.Value.ToString();
 
         var queryString = queryParams.Any()
-            ? "?" + string.Join("&", queryParams.Select(kvp => $"{kvp.Key}={HttpUtility.UrlEncode(kvp.Value)}"))
+            ? "?" + string.Join("&", queryParams.Select(kvp => $"{kvp.Key}={HttpUtility_UrlEncode(kvp.Value)}"))
             : "";
 
         return await SendRequestAsync<GetChatMembersResponse>(
@@ -374,7 +372,7 @@ public class MaxBotClient : IMaxBotClient
             queryParams["block"] = request.Block.Value.ToString();
 
         var queryString = queryParams.Any()
-            ? "?" + string.Join("&", queryParams.Select(kvp => $"{kvp.Key}={HttpUtility.UrlEncode(kvp.Value)}"))
+            ? "?" + string.Join("&", queryParams.Select(kvp => $"{kvp.Key}={HttpUtility_UrlEncode(kvp.Value)}"))
             : "";
 
         return await SendRequestAsync<BaseResponse>(
@@ -397,13 +395,13 @@ public class MaxBotClient : IMaxBotClient
 
     public async Task<string> UploadsAsync(UploadRequest request, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException_ThrowIfNull(request);
         request.Validate();
 
         var uploadType = request.GetUploadTypeValue();
         var uploadInfo = await SendRequestAsync<UploadResponse>(
             HttpMethod.Post,
-            $"/uploads?type={HttpUtility.UrlEncode(uploadType)}",
+            $"/uploads?type={HttpUtility_UrlEncode(uploadType)}",
             null,
             cancellationToken);
 
@@ -434,7 +432,7 @@ public class MaxBotClient : IMaxBotClient
             queryParams["types"] = string.Join(",", request.Types);
 
         var queryString = queryParams.Any()
-            ? "?" + string.Join("&", queryParams.Select(kvp => $"{kvp.Key}={HttpUtility.UrlEncode(kvp.Value)}"))
+            ? "?" + string.Join("&", queryParams.Select(kvp => $"{kvp.Key}={HttpUtility_UrlEncode(kvp.Value)}"))
             : "";
 
         return await SendRequestAsync<GetUpdatesResponse>(
@@ -457,7 +455,7 @@ public class MaxBotClient : IMaxBotClient
         SubscriptionRequest request,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException_ThrowIfNull(request);
         request.Validate();
 
         return await SendRequestAsync<BaseResponse>(
@@ -471,12 +469,12 @@ public class MaxBotClient : IMaxBotClient
         DeleteSubscriptionRequest request,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException_ThrowIfNull(request);
         request.Validate();
 
         return await SendRequestAsync<BaseResponse>(
             HttpMethod.Delete,
-            $"/subscriptions?url={HttpUtility.UrlEncode(request.Url)}",
+            $"/subscriptions?url={HttpUtility_UrlEncode(request.Url)}",
             null,
             cancellationToken);
     }
@@ -588,7 +586,7 @@ public class MaxBotClient : IMaxBotClient
         };
 
         if (!string.IsNullOrWhiteSpace(token))
-            return token;
+            return token!;
 
         var expectedStep = request.Type is UploadType.Video or UploadType.Audio
             ? "первого шага загрузки video/audio"
@@ -605,7 +603,7 @@ public class MaxBotClient : IMaxBotClient
 
     private static bool IsVideoTokenValid(string videoToken)
     {
-        return videoToken.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-');
+        return videoToken.All(c => Char_IsAsciiLetterOrDigit(c) || c is '_' or '-');
     }
 
     private static string CreateResponsePreview(string responseContent)
@@ -656,10 +654,17 @@ public class MaxBotClient : IMaxBotClient
             return _inner.Read(buffer, offset, count);
         }
 
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            return base.ReadAsync(buffer, offset, count, cancellationToken);
+        }
+
+#if !NET462
         public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
         {
             return _inner.ReadAsync(buffer, cancellationToken);
         }
+#endif
 
         public override long Seek(long offset, SeekOrigin origin)
         {
@@ -676,10 +681,17 @@ public class MaxBotClient : IMaxBotClient
             _inner.Write(buffer, offset, count);
         }
 
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            return base.WriteAsync(buffer, offset, count, cancellationToken);
+        }
+
+#if !NET462
         public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
         {
             return _inner.WriteAsync(buffer, cancellationToken);
         }
+#endif
 
         protected override void Dispose(bool disposing)
         {

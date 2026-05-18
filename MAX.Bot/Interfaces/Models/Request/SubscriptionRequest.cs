@@ -1,5 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 using UpdateTypeConstants = MAX.Bot.Interfaces.Models.UpdateTypes;
+using static MAX.Bot.FrameworkSpecificMethods;
 
 namespace MAX.Bot.Interfaces.Models.Request;
 
@@ -66,7 +67,7 @@ public record SubscriptionRequest
         if (secret.Length is < 5 or > 256)
             throw new ArgumentException("Secret должен содержать от 5 до 256 символов.", nameof(Secret));
 
-        if (!secret.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-'))
+        if (!secret.All(c => Char_IsAsciiLetterOrDigit(c) || c is '_' or '-'))
             throw new ArgumentException("Secret может содержать только символы A-Z, a-z, 0-9, '_' и '-'.", nameof(Secret));
     }
 
