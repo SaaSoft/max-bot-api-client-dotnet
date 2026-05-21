@@ -7,5 +7,4 @@ MAX.Bot/obj/*
 .idea/*
 .DS_Store
 SaaSoft.MAX.Bot.sln.DotSettings.user
-**/*.*nupkg
 .temp
