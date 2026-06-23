@@ -8,7 +8,6 @@ using MAX.Bot.Interfaces.Models.Request.Message.Attachment;
 using MAX.Bot.Interfaces.Models.Request.Message.Attachment.Payloads;
 using MAX.Bot.Interfaces.Models.Response;
 using Microsoft.Extensions.DependencyInjection;
-using Attachment = MAX.Bot.Interfaces.Models.Request.Message.Attachment.Attachment;
 
 const string C_BOT_API = "";
 const long C_TEST_CHAT_ID = -70581633278133;
@@ -38,7 +37,7 @@ try
     Console.WriteLine("Вызываем GetMeAsync...");
     var me = await maxApiClient.GetMeAsync();
     Console.WriteLine($"Успех! Бот: {me.FirstName} (ID: {me.Id})");
-
+    
     Console.WriteLine("Вызываем SendMessageAsync...");
     var sentMessageResponse = await maxApiClient.SendMessageAsync(new SendMessageRequest()
     {
@@ -125,9 +124,9 @@ try
         Count = 50,
     });
     Console.WriteLine($"Получено {response?.Messages?.Length} сообщений:");
-
+    
     if (response?.Messages is { Length: > 0 } messages)
-    {
+    {   
         var lastMessageId = messages.LastOrDefault()?.Body?.Mid;
         if (!string.IsNullOrWhiteSpace(lastMessageId))
         {
@@ -228,7 +227,7 @@ try
     {
         Console.WriteLine("Закрепленного сообщения нет.");
     }
-
+    
     Console.WriteLine("Вызываем GetChatMembershipAsync...");
     var responseChatMembership = await maxApiClient.GetChatMembershipAsync(C_TEST_CHAT_ID);
     Console.WriteLine($"Бот в чате: user_id={responseChatMembership.UserId}, is_bot={responseChatMembership.IsBot}, is_owner={responseChatMembership.IsOwner}, is_admin={responseChatMembership.IsAdmin}, permissions={string.Join(",", responseChatMembership.Permissions ?? new List<string>())}");
@@ -356,6 +355,37 @@ try
             }
         }
     });
+
+    Console.WriteLine("Вызываем GetMessagesAsync...");
+    response = await maxApiClient.GetMessagesAsync(new GetMessagesRequest()
+    {
+        ChatId = C_TEST_CHAT_ID,
+        Count = 1,
+    });
+    Console.WriteLine($"Получено {response?.Messages?.Length} сообщений:");
+
+    if (response?.Messages is { Length: > 0 } m)
+    {
+        var mid = m.FirstOrDefault()?.Body?.Mid;
+        if (!string.IsNullOrWhiteSpace(mid))
+        {
+            Console.WriteLine("Вызываем GetMessageByIdAsync...");
+            var responseById = await maxApiClient.GetMessageByIdAsync(mid);
+            Console.WriteLine($"Получено {responseById?.Body?.Text}:");
+
+            if (responseById?.Body?.Attachments is { Length: > 0 } attachments)
+            {
+                if (attachments[0] is FileAttachment fileAttachment)
+                {
+                    Console.WriteLine($"Вложение файла: {fileAttachment.Payload.Token}");
+                }
+                else
+                {
+                    Console.WriteLine("Что-то пошло не так. Вложение файла не найдено.");
+                }
+            }
+        }
+    }
 
     Console.WriteLine("Вызываем UploadsAsync для video.mp4...");
     await using var videoFileContent = File.OpenRead(videoFilePath);

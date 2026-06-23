@@ -2,6 +2,7 @@
 using System.Net.Http.Headers;
 using MAX.Bot.Exceptions;
 using MAX.Bot.Interfaces;
+using MAX.Bot.Interfaces.JsonConverters;
 using MAX.Bot.Interfaces.Models;
 using MAX.Bot.Interfaces.Models.Request;
 using MAX.Bot.Interfaces.Models.Request.Message;
@@ -54,7 +55,8 @@ public class MaxBotClient : IMaxBotClient
             {
                 PropertyNameCaseInsensitive = true,
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+                Converters = { new AttachmentJsonConverter() },
             });
             request.Content = new StringContent(json, Encoding.UTF8, "application/json");
         }
@@ -72,7 +74,8 @@ public class MaxBotClient : IMaxBotClient
 
         return JsonSerializer.Deserialize<T>(responseContent, new JsonSerializerOptions
         {
-            PropertyNameCaseInsensitive = true
+            PropertyNameCaseInsensitive = true,
+            Converters = { new AttachmentJsonConverter() },
         }) ?? throw new InvalidOperationException("Не удалось десериализовать ответ");
     }
 

@@ -2,19 +2,16 @@ using MAX.Bot.Interfaces.Models.Request.Message.Attachment.Payloads;
 
 namespace MAX.Bot.Interfaces.Models.Request.Message.Attachment;
 
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
-[JsonDerivedType(typeof(InlineKeyboardAttachment), "inline_keyboard")]
-[JsonDerivedType(typeof(VideoAttachment), "video")]
-[JsonDerivedType(typeof(ImageAttachment), "image")]
-[JsonDerivedType(typeof(AudioAttachment), "audio")]
-[JsonDerivedType(typeof(FileAttachment), "file")]
-[JsonDerivedType(typeof(StickerAttachment), "sticker")]
-[JsonDerivedType(typeof(ContactAttachment), "contact")]
-[JsonDerivedType(typeof(LocationAttachment), "location")]
 public abstract class Attachment
 {
+    [JsonPropertyName("type")]
+    public abstract string Type { get; }
+}
+
+public abstract class Attachment<T> : Attachment where T : AttachmentPayload
+{
     [JsonPropertyName("payload")]
-    public AttachmentPayload? Payload { get; set; }
+    public abstract T Payload { get; set; }
 }
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
@@ -27,3 +24,19 @@ public abstract class Attachment
 [JsonDerivedType(typeof(ContactPayload), "contact")]
 [JsonDerivedType(typeof(LocationPayload), "location")]
 public abstract class AttachmentPayload { }
+
+/// <summary>
+/// Типы вложений
+/// </summary>
+public static class AttachmentTypes
+{
+    public const string InlineKeyboard = "inline_keyboard";
+    public const string Video = "video";
+    public const string Image = "image";
+    public const string Audio = "audio";
+    public const string File = "file";
+    public const string Sticker = "sticker";
+    public const string Contact = "contact";
+    public const string Location = "location";
+    public const string Share = "share";
+}

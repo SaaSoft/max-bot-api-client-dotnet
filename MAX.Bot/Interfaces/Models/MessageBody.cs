@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+﻿using MAX.Bot.Interfaces.Models.Request.Message.Attachment;
 
 namespace MAX.Bot.Interfaces.Models;
 
@@ -18,4 +18,10 @@ public record MessageBody
     /// </summary>
     [JsonPropertyName("text")]
     public string? Text { get; set; }
+
+    /// <summary>
+    /// Вложения
+    /// </summary>
+    [JsonPropertyName("attachments")]
+    public Attachment[]? Attachments { get; set; }
 }
