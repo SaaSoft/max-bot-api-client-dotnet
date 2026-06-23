@@ -126,7 +126,7 @@ try
     Console.WriteLine($"Получено {response?.Messages?.Length} сообщений:");
     
     if (response?.Messages is { Length: > 0 } messages)
-    {   
+    {
         var lastMessageId = messages.LastOrDefault()?.Body?.Mid;
         if (!string.IsNullOrWhiteSpace(lastMessageId))
         {
