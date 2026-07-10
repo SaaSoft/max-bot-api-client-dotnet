@@ -17,13 +17,4 @@ public abstract class Attachment
     public AttachmentPayload? Payload { get; set; }
 }
 
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
-[JsonDerivedType(typeof(InlineKeyboardPayload), "inline_keyboard")]
-[JsonDerivedType(typeof(VideoPayload), "video")]
-[JsonDerivedType(typeof(ImagePayload), "image")]
-[JsonDerivedType(typeof(AudioPayload), "audio")]
-[JsonDerivedType(typeof(FilePayload), "file")]
-[JsonDerivedType(typeof(StickerPayload), "sticker")]
-[JsonDerivedType(typeof(ContactPayload), "contact")]
-[JsonDerivedType(typeof(LocationPayload), "location")]
 public abstract class AttachmentPayload { }

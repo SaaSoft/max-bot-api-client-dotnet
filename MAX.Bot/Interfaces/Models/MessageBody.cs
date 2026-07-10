@@ -18,4 +18,10 @@ public record MessageBody
     /// </summary>
     [JsonPropertyName("text")]
     public string? Text { get; set; }
+
+    /// <summary>
+    /// Вложения сообщения
+    /// </summary>
+    [JsonPropertyName("attachments")]
+    public List<Request.Message.Attachment.Attachment>? Attachments { get; set; }
 }

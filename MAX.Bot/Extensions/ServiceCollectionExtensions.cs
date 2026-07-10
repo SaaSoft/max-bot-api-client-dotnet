@@ -12,7 +12,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddHttpClient("MaxBot", client =>
         {
-            client.BaseAddress = new Uri("https://platform-api.max.ru");
+            client.BaseAddress = new Uri("https://platform-api2.max.ru");
             client.DefaultRequestHeaders.Add("Authorization", token);
             client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
         });

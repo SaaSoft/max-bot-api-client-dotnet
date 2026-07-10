@@ -13,7 +13,7 @@ namespace MAX.Bot;
 public class MaxBotClient : IMaxBotClient
 {
     private readonly HttpClient _httpClient;
-    private readonly string _baseUrl = "https://platform-api.max.ru";
+    private readonly string _baseUrl = "https://platform-api2.max.ru";
 
     public CancellationToken GlobalCancelToken { get; }
 
@@ -50,12 +50,7 @@ public class MaxBotClient : IMaxBotClient
 
         if (data != null && (method == HttpMethod.Post || method == HttpMethod.Put || method == HttpMethod_Patch))
         {
-            var json = JsonSerializer.Serialize(data, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true,
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-            });
+            var json = JsonSerializer.Serialize(data, MaxBotJsonSerializerOptions.Serialize);
             request.Content = new StringContent(json, Encoding.UTF8, "application/json");
         }
 
@@ -70,10 +65,8 @@ public class MaxBotClient : IMaxBotClient
                 response.StatusCode);
         }
 
-        return JsonSerializer.Deserialize<T>(responseContent, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        }) ?? throw new InvalidOperationException("Не удалось десериализовать ответ");
+        return JsonSerializer.Deserialize<T>(responseContent, MaxBotJsonSerializerOptions.Deserialize)
+            ?? throw new InvalidOperationException("Не удалось десериализовать ответ");
     }
 
     public async Task<User> GetMeAsync(CancellationToken cancellationToken = default)
@@ -556,10 +549,8 @@ public class MaxBotClient : IMaxBotClient
                 $"API MAX вернул не JSON-ответ после загрузки файла: {CreateResponsePreview(responseContent)}");
         }
 
-        return JsonSerializer.Deserialize<UploadResponse>(responseContent, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        }) ?? throw new InvalidOperationException("Не удалось десериализовать ответ загрузки файла");
+        return JsonSerializer.Deserialize<UploadResponse>(responseContent, MaxBotJsonSerializerOptions.Deserialize)
+            ?? throw new InvalidOperationException("Не удалось десериализовать ответ загрузки файла");
     }
 
     private static Uri CreateUploadUri(string url)

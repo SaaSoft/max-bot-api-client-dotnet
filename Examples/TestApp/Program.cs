@@ -1,4 +1,5 @@
-﻿using MAX.Bot.Exceptions;
+﻿using System.Text.Json;
+using MAX.Bot.Exceptions;
 using MAX.Bot.Extensions;
 using MAX.Bot.Interfaces;
 using MAX.Bot.Interfaces.Models;
@@ -30,16 +31,18 @@ var answerCallbackId = Environment.GetEnvironmentVariable("MAX_ANSWER_CALLBACK_I
 var services = new ServiceCollection();
 services.AddMaxBotClient(C_BOT_API, 30);
 
+await using var temp = TempSession.Create();
+
 try
 {
     var serviceProvider = services.BuildServiceProvider();
     var maxApiClient = serviceProvider.GetRequiredService<IMaxBotClient>();
 
-    Console.WriteLine("Вызываем GetMeAsync...");
+    TempSession.Write("Вызываем GetMeAsync...");
     var me = await maxApiClient.GetMeAsync();
-    Console.WriteLine($"Успех! Бот: {me.FirstName} (ID: {me.Id})");
+    TempSession.Write($"Успех! Бот: {me.FirstName} (ID: {me.Id})");
 
-    Console.WriteLine("Вызываем SendMessageAsync...");
+    TempSession.Write("Вызываем SendMessageAsync...");
     var sentMessageResponse = await maxApiClient.SendMessageAsync(new SendMessageRequest()
     {
         ChatId = C_TEST_CHAT_ID,
@@ -47,7 +50,7 @@ try
         Format = MessageFormat.Markdown,
     });
 
-    Console.WriteLine("Вызываем SendMessageAsync-Attachment-InlineKeyboardPayload...");
+    TempSession.Write("Вызываем SendMessageAsync-Attachment-InlineKeyboardPayload...");
     await maxApiClient.SendMessageAsync(new SendMessageRequest()
     {
         ChatId = C_TEST_CHAT_ID,
@@ -100,7 +103,7 @@ try
 
     if (enableAnswerCallbackTest && !string.IsNullOrWhiteSpace(answerCallbackId))
     {
-        Console.WriteLine("Вызываем AnswerCallbackAsync...");
+        TempSession.Write("Вызываем AnswerCallbackAsync...");
         var responseAnswerCallback = await maxApiClient.AnswerCallbackAsync(new AnswerCallbackRequest()
         {
             CallbackId = answerCallbackId,
@@ -111,146 +114,153 @@ try
                 Format = MessageFormat.Markdown,
             },
         });
-        Console.WriteLine($"Callback обработан: {responseAnswerCallback.Success}, сообщение: {responseAnswerCallback.Message}");
+        TempSession.Write($"Callback обработан: {responseAnswerCallback.Success}, сообщение: {responseAnswerCallback.Message}");
     }
     else
     {
-        Console.WriteLine("AnswerCallbackAsync пропущен: нужен реальный callback_id из события message_callback. Укажите MAX_ANSWER_CALLBACK_ID и включите MAX_ENABLE_ANSWER_CALLBACK_TEST=true.");
+        TempSession.Write("AnswerCallbackAsync пропущен: нужен реальный callback_id из события message_callback. Укажите MAX_ANSWER_CALLBACK_ID и включите MAX_ENABLE_ANSWER_CALLBACK_TEST=true.");
     }
 
-    Console.WriteLine("Вызываем GetMessagesAsync...");
+    temp.Log("Вызываем GetMessagesAsync...");
     var response = await maxApiClient.GetMessagesAsync(new GetMessagesRequest()
     {
         ChatId = C_TEST_CHAT_ID,
         Count = 50,
     });
-    Console.WriteLine($"Получено {response?.Messages?.Length} сообщений:");
+    temp.Log($"Получено {response?.Messages?.Length} сообщений:");
 
     if (response?.Messages is { Length: > 0 } messages)
     {
+        foreach (var message in messages)
+        {
+            temp.Log($"Сообщение {message.Body?.Mid}: {message.Body?.Text}");
+            await SaveMessageAttachmentsAsync(maxApiClient, temp, message.Body);
+        }
+
         var lastMessageId = messages.LastOrDefault()?.Body?.Mid;
         if (!string.IsNullOrWhiteSpace(lastMessageId))
         {
-            Console.WriteLine("Вызываем GetMessageByIdAsync...");
+            temp.Log("Вызываем GetMessageByIdAsync...");
             var responseById = await maxApiClient.GetMessageByIdAsync(lastMessageId);
-            Console.WriteLine($"Получено {responseById?.Body?.Text}:");
+            temp.Log($"Получено {responseById?.Body?.Text}:");
+            await SaveMessageAttachmentsAsync(maxApiClient, temp, responseById?.Body, "by-id");
 
-            Console.WriteLine("Вызываем EditMessageByIdAsync...");
+            TempSession.Write("Вызываем EditMessageByIdAsync...");
             var responseEdit = await maxApiClient.EditMessageByIdAsync(lastMessageId, new SendMessageRequest()
             {
                 Text = "Изменил ТЕКСТ !!!",
                 Format = MessageFormat.Markdown,
             });
-            Console.WriteLine($"Изменено {responseEdit?.Success}:");
+            TempSession.Write($"Изменено {responseEdit?.Success}:");
         }
 
         var firstMessageId = messages.FirstOrDefault()?.Body?.Mid;
         if (!string.IsNullOrWhiteSpace(firstMessageId))
         {
-            Console.WriteLine("Вызываем DeleteMessageByIdAsync...");
+            TempSession.Write("Вызываем DeleteMessageByIdAsync...");
             var responseDelete = await maxApiClient.DeleteMessageByIdAsync(firstMessageId);
-            Console.WriteLine($"Удалено {responseDelete?.Success}:");
+            TempSession.Write($"Удалено {responseDelete?.Success}:");
         }
     }
 
-    Console.WriteLine("Вызываем GetChatsAsync...");
+    temp.Log($"Готово. Логи и вложения: {temp.SessionDirectory}");
     var responseChats = await maxApiClient.GetChatsAsync(new GetChatsRequest()
     {
         Count = 1,
         Marker = null,
     });
-    Console.WriteLine($"Получено {responseChats?.Chats?.Length} чатов:");
+    TempSession.Write($"Получено {responseChats?.Chats?.Length} чатов:");
 
-    Console.WriteLine("Вызываем GetChatByIdAsync...");
+    TempSession.Write("Вызываем GetChatByIdAsync...");
     var responseChat = await maxApiClient.GetChatByIdAsync(C_TEST_CHAT_ID);
-    Console.WriteLine($"Получен чат: id={responseChat.ChatId}, title={responseChat.Title}, type={responseChat.Type}, status={responseChat.Status}");
+    TempSession.Write($"Получен чат: id={responseChat.ChatId}, title={responseChat.Title}, type={responseChat.Type}, status={responseChat.Status}");
 
     if (!string.IsNullOrWhiteSpace(responseChat.Title))
     {
-        Console.WriteLine("Вызываем UpdateChatAsync...");
+        TempSession.Write("Вызываем UpdateChatAsync...");
         var responseUpdatedChat = await maxApiClient.UpdateChatAsync(C_TEST_CHAT_ID, new UpdateChatRequest()
         {
             Title = responseChat.Title,
             Notify = false,
         });
-        Console.WriteLine($"Чат обновлен: id={responseUpdatedChat.ChatId}, title={responseUpdatedChat.Title}, type={responseUpdatedChat.Type}, status={responseUpdatedChat.Status}");
+        TempSession.Write($"Чат обновлен: id={responseUpdatedChat.ChatId}, title={responseUpdatedChat.Title}, type={responseUpdatedChat.Type}, status={responseUpdatedChat.Status}");
     }
     else
     {
-        Console.WriteLine("UpdateChatAsync пропущен: у тестового чата нет названия для безопасной проверки без изменения данных.");
+        TempSession.Write("UpdateChatAsync пропущен: у тестового чата нет названия для безопасной проверки без изменения данных.");
     }
 
     if (enableDeleteChatTest && deleteTestChatId != 0)
     {
-        Console.WriteLine("Вызываем DeleteChatAsync...");
+        TempSession.Write("Вызываем DeleteChatAsync...");
         var responseDeleteChat = await maxApiClient.DeleteChatAsync(deleteTestChatId);
-        Console.WriteLine($"Чат удален: {responseDeleteChat.Success}, сообщение: {responseDeleteChat.Message}");
+        TempSession.Write($"Чат удален: {responseDeleteChat.Success}, сообщение: {responseDeleteChat.Message}");
     }
     else
     {
-        Console.WriteLine("DeleteChatAsync пропущен: метод удаляет групповой чат для всех участников. Укажите отдельный тестовый чат в MAX_DELETE_TEST_CHAT_ID и включите MAX_ENABLE_DELETE_CHAT_TEST=true.");
+        TempSession.Write("DeleteChatAsync пропущен: метод удаляет групповой чат для всех участников. Укажите отдельный тестовый чат в MAX_DELETE_TEST_CHAT_ID и включите MAX_ENABLE_DELETE_CHAT_TEST=true.");
     }
 
-    Console.WriteLine("Вызываем SendChatActionAsync...");
+    TempSession.Write("Вызываем SendChatActionAsync...");
     var responseChatAction = await maxApiClient.SendChatActionAsync(C_TEST_CHAT_ID, new SendChatActionRequest()
     {
         Action = SenderActions.TypingOn,
     });
-    Console.WriteLine($"Действие бота отправлено: {responseChatAction.Success}, сообщение: {responseChatAction.Message}");
+    TempSession.Write($"Действие бота отправлено: {responseChatAction.Success}, сообщение: {responseChatAction.Message}");
 
     var sentMessageId = sentMessageResponse.Message?.Body?.Mid;
     if (!string.IsNullOrWhiteSpace(sentMessageId))
     {
-        Console.WriteLine("Вызываем PinChatMessageAsync...");
+        TempSession.Write("Вызываем PinChatMessageAsync...");
         var responsePinMessage = await maxApiClient.PinChatMessageAsync(C_TEST_CHAT_ID, new PinChatMessageRequest()
         {
             MessageId = sentMessageId,
             Notify = false,
         });
-        Console.WriteLine($"Сообщение закреплено: {responsePinMessage.Success}, сообщение: {responsePinMessage.Message}");
+        TempSession.Write($"Сообщение закреплено: {responsePinMessage.Success}, сообщение: {responsePinMessage.Message}");
     }
     else
     {
-        Console.WriteLine("PinChatMessageAsync пропущен: API не вернул ID отправленного сообщения.");
+        TempSession.Write("PinChatMessageAsync пропущен: API не вернул ID отправленного сообщения.");
     }
 
-    Console.WriteLine("Вызываем GetChatPinnedMessageAsync...");
+    TempSession.Write("Вызываем GetChatPinnedMessageAsync...");
     var responsePinnedMessage = await maxApiClient.GetChatPinnedMessageAsync(C_TEST_CHAT_ID);
     if (responsePinnedMessage.Message != null)
     {
-        Console.WriteLine($"Закрепленное сообщение: {responsePinnedMessage.Message.Body?.Mid}, текст: {responsePinnedMessage.Message.Body?.Text}");
+        TempSession.Write($"Закрепленное сообщение: {responsePinnedMessage.Message.Body?.Mid}, текст: {responsePinnedMessage.Message.Body?.Text}");
 
-        Console.WriteLine("Вызываем UnpinChatMessageAsync...");
+        TempSession.Write("Вызываем UnpinChatMessageAsync...");
         var responseUnpinMessage = await maxApiClient.UnpinChatMessageAsync(C_TEST_CHAT_ID);
-        Console.WriteLine($"Закрепленное сообщение удалено: {responseUnpinMessage.Success}, сообщение: {responseUnpinMessage.Message}");
+        TempSession.Write($"Закрепленное сообщение удалено: {responseUnpinMessage.Success}, сообщение: {responseUnpinMessage.Message}");
     }
     else
     {
-        Console.WriteLine("Закрепленного сообщения нет.");
+        TempSession.Write("Закрепленного сообщения нет.");
     }
 
-    Console.WriteLine("Вызываем GetChatMembershipAsync...");
+    TempSession.Write("Вызываем GetChatMembershipAsync...");
     var responseChatMembership = await maxApiClient.GetChatMembershipAsync(C_TEST_CHAT_ID);
-    Console.WriteLine($"Бот в чате: user_id={responseChatMembership.UserId}, is_bot={responseChatMembership.IsBot}, is_owner={responseChatMembership.IsOwner}, is_admin={responseChatMembership.IsAdmin}, permissions={string.Join(",", responseChatMembership.Permissions ?? new List<string>())}");
+    TempSession.Write($"Бот в чате: user_id={responseChatMembership.UserId}, is_bot={responseChatMembership.IsBot}, is_owner={responseChatMembership.IsOwner}, is_admin={responseChatMembership.IsAdmin}, permissions={string.Join(",", responseChatMembership.Permissions ?? new List<string>())}");
 
     if (enableLeaveChatTest && leaveTestChatId != 0)
     {
-        Console.WriteLine("Вызываем LeaveChatAsync...");
+        TempSession.Write("Вызываем LeaveChatAsync...");
         var responseLeaveChat = await maxApiClient.LeaveChatAsync(leaveTestChatId);
-        Console.WriteLine($"Бот удален из чата: {responseLeaveChat.Success}, сообщение: {responseLeaveChat.Message}");
+        TempSession.Write($"Бот удален из чата: {responseLeaveChat.Success}, сообщение: {responseLeaveChat.Message}");
     }
     else
     {
-        Console.WriteLine("LeaveChatAsync пропущен: метод удаляет текущего бота из группового чата. Укажите отдельный тестовый чат в MAX_LEAVE_TEST_CHAT_ID и включите MAX_ENABLE_LEAVE_CHAT_TEST=true.");
+        TempSession.Write("LeaveChatAsync пропущен: метод удаляет текущего бота из группового чата. Укажите отдельный тестовый чат в MAX_LEAVE_TEST_CHAT_ID и включите MAX_ENABLE_LEAVE_CHAT_TEST=true.");
     }
 
-    Console.WriteLine("Вызываем GetChatAdminsAsync...");
+    TempSession.Write("Вызываем GetChatAdminsAsync...");
     var responseChatAdmins = await maxApiClient.GetChatAdminsAsync(C_TEST_CHAT_ID);
-    Console.WriteLine($"Получено {responseChatAdmins?.Members?.Length} администраторов, marker={responseChatAdmins?.Marker}");
+    TempSession.Write($"Получено {responseChatAdmins?.Members?.Length} администраторов, marker={responseChatAdmins?.Marker}");
 
     if (enableAddChatAdminTest && adminTestUserId != 0)
     {
-        Console.WriteLine("Вызываем AddChatAdminsAsync...");
+        TempSession.Write("Вызываем AddChatAdminsAsync...");
         var responseAddChatAdmins = await maxApiClient.AddChatAdminsAsync(C_TEST_CHAT_ID, new AddChatAdminsRequest()
         {
             Admins = new List<ChatAdmin>
@@ -268,32 +278,32 @@ try
                 }
             }
         });
-        Console.WriteLine($"Администратор назначен: {responseAddChatAdmins.Success}, сообщение: {responseAddChatAdmins.Message}");
+        TempSession.Write($"Администратор назначен: {responseAddChatAdmins.Success}, сообщение: {responseAddChatAdmins.Message}");
     }
     else
     {
-        Console.WriteLine("AddChatAdminsAsync пропущен: метод меняет права пользователя. Укажите MAX_ADMIN_TEST_USER_ID и включите MAX_ENABLE_ADD_CHAT_ADMIN_TEST=true.");
+        TempSession.Write("AddChatAdminsAsync пропущен: метод меняет права пользователя. Укажите MAX_ADMIN_TEST_USER_ID и включите MAX_ENABLE_ADD_CHAT_ADMIN_TEST=true.");
     }
 
     if (enableRemoveChatAdminTest && adminTestUserId != 0)
     {
-        Console.WriteLine("Вызываем RemoveChatAdminAsync...");
+        TempSession.Write("Вызываем RemoveChatAdminAsync...");
         var responseRemoveChatAdmin = await maxApiClient.RemoveChatAdminAsync(C_TEST_CHAT_ID, adminTestUserId);
-        Console.WriteLine($"Права администратора отменены: {responseRemoveChatAdmin.Success}, сообщение: {responseRemoveChatAdmin.Message}");
+        TempSession.Write($"Права администратора отменены: {responseRemoveChatAdmin.Success}, сообщение: {responseRemoveChatAdmin.Message}");
     }
     else
     {
-        Console.WriteLine("RemoveChatAdminAsync пропущен: метод снимает права администратора. Укажите MAX_ADMIN_TEST_USER_ID и включите MAX_ENABLE_REMOVE_CHAT_ADMIN_TEST=true.");
+        TempSession.Write("RemoveChatAdminAsync пропущен: метод снимает права администратора. Укажите MAX_ADMIN_TEST_USER_ID и включите MAX_ENABLE_REMOVE_CHAT_ADMIN_TEST=true.");
     }
 
-    Console.WriteLine("Вызываем GetChatMembersAsync...");
+    TempSession.Write("Вызываем GetChatMembersAsync...");
     var responseChatMembers = await maxApiClient.GetChatMembersAsync(new GetChatMembersRequest()
     {
         ChatId = C_TEST_CHAT_ID,
     });
-    Console.WriteLine($"Получено {responseChatMembers?.Members?.Length} пользователей:");
+    TempSession.Write($"Получено {responseChatMembers?.Members?.Length} пользователей:");
 
-    Console.WriteLine("Вызываем AddChatMemberAsync...");
+    TempSession.Write("Вызываем AddChatMemberAsync...");
     var isAdded = await maxApiClient.AddChatMemberAsync(new AddChatMemberRequest()
     {
         ChatId = C_TEST_CHAT_ID,
@@ -302,10 +312,10 @@ try
 
     if (isAdded != null && isAdded.Success)
     {
-        Console.WriteLine("Пользователь успешно добавлен в чат");
+        TempSession.Write("Пользователь успешно добавлен в чат");
     }
 
-    Console.WriteLine("Вызываем DeleteChatMemberAsync...");
+    TempSession.Write("Вызываем DeleteChatMemberAsync...");
     var isDeleted = await maxApiClient.DeleteChatMemberAsync(new DeleteChatMemberRequest()
     {
         ChatId = C_TEST_CHAT_ID,
@@ -314,22 +324,22 @@ try
 
     if (isDeleted != null && isDeleted.Success)
     {
-        Console.WriteLine("Пользователь успешно удален из чата");
+        TempSession.Write("Пользователь успешно удален из чата");
     }
 
-    Console.WriteLine("Проверяем GetMessageByIdAsync для тестового ID...");
+    TempSession.Write("Проверяем GetMessageByIdAsync для тестового ID...");
     var messageId = response?.Messages?.Last()?.Body?.Mid;
     if (messageId != null)
     {
         var responseMessage = await maxApiClient.GetMessageByIdAsync(messageId);
-        Console.WriteLine($"Получено сообщение по ID: {responseMessage?.Body?.Text}");
+        TempSession.Write($"Получено сообщение по ID: {responseMessage?.Body?.Text}");
     }
 
     var filesDirectory = Path.Combine(AppContext.BaseDirectory, "Files");
     var textFilePath = Path.Combine(filesDirectory, "test.txt");
     var videoFilePath = Path.Combine(filesDirectory, "video.mp4");
 
-    Console.WriteLine("Вызываем UploadsAsync для test.txt...");
+    TempSession.Write("Вызываем UploadsAsync для test.txt...");
     await using var textFileContent = File.OpenRead(textFilePath);
     var textFileToken = await maxApiClient.UploadsAsync(new UploadRequest()
     {
@@ -338,9 +348,9 @@ try
         FileName = Path.GetFileName(textFilePath),
         ContentType = "text/plain",
     });
-    Console.WriteLine($"Получен токен загруженного файла: {textFileToken}");
+    TempSession.Write($"Получен токен загруженного файла: {textFileToken}");
 
-    Console.WriteLine("Отправляем сообщение с файлом test.txt...");
+    TempSession.Write("Отправляем сообщение с файлом test.txt...");
     await SendMessageWithAttachmentRetry(maxApiClient, new SendMessageRequest()
     {
         ChatId = C_TEST_CHAT_ID,
@@ -357,7 +367,7 @@ try
         }
     });
 
-    Console.WriteLine("Вызываем UploadsAsync для video.mp4...");
+    TempSession.Write("Вызываем UploadsAsync для video.mp4...");
     await using var videoFileContent = File.OpenRead(videoFilePath);
     var videoToken = await maxApiClient.UploadsAsync(new UploadRequest()
     {
@@ -366,13 +376,13 @@ try
         FileName = Path.GetFileName(videoFilePath),
         ContentType = "video/mp4",
     });
-    Console.WriteLine($"Получен токен загруженного видео: {videoToken}");
+    TempSession.Write($"Получен токен загруженного видео: {videoToken}");
 
-    Console.WriteLine("Вызываем GetVideoAsync для video.mp4...");
+    TempSession.Write("Вызываем GetVideoAsync для video.mp4...");
     var videoInfo = await GetVideoInfoWithRetry(maxApiClient, videoToken);
-    Console.WriteLine($"Видео: token={videoInfo.Token}, width={videoInfo.Width}, height={videoInfo.Height}, duration={videoInfo.Duration}");
+    TempSession.Write($"Видео: token={videoInfo.Token}, width={videoInfo.Width}, height={videoInfo.Height}, duration={videoInfo.Duration}");
 
-    Console.WriteLine("Отправляем сообщение с видео video.mp4...");
+    TempSession.Write("Отправляем сообщение с видео video.mp4...");
     await SendMessageWithAttachmentRetry(maxApiClient, new SendMessageRequest()
     {
         ChatId = C_TEST_CHAT_ID,
@@ -389,28 +399,28 @@ try
         }
     });
 
-    Console.WriteLine("Вызываем GetUpdatesAsync...");
+    TempSession.Write("Вызываем GetUpdatesAsync...");
     var responseUpdates = await maxApiClient.GetUpdatesAsync(new GetUpdatesRequest()
     {
         Timeout = 2,
     });
-    Console.WriteLine($"Маркер: {responseUpdates?.Marker}, Количество обновлений: {responseUpdates?.Updates.Count}");
+    TempSession.Write($"Маркер: {responseUpdates?.Marker}, Количество обновлений: {responseUpdates?.Updates.Count}");
 
-    Console.WriteLine("Вызываем GetSubscriptionsAsync...");
+    TempSession.Write("Вызываем GetSubscriptionsAsync...");
     var responseSubscriptions = await maxApiClient.GetSubscriptionsAsync();
-    Console.WriteLine($"Количество Webhook-подписок: {responseSubscriptions.Subscriptions.Count}");
+    TempSession.Write($"Количество Webhook-подписок: {responseSubscriptions.Subscriptions.Count}");
 
     foreach (var subscription in responseSubscriptions.Subscriptions)
     {
         var updateTypes = subscription.UpdateTypes is { Count: > 0 }
             ? string.Join(", ", subscription.UpdateTypes)
             : "все типы";
-        Console.WriteLine($"Подписка: url={subscription.Url}, time={subscription.Time}, update_types={updateTypes}");
+        TempSession.Write($"Подписка: url={subscription.Url}, time={subscription.Time}, update_types={updateTypes}");
     }
 
     if (!string.IsNullOrWhiteSpace(C_TEST_WEBHOOK_URL))
     {
-        Console.WriteLine("Вызываем SubscribeAsync...");
+        TempSession.Write("Вызываем SubscribeAsync...");
         var responseSubscribe = await maxApiClient.SubscribeAsync(new SubscriptionRequest()
         {
             Url = C_TEST_WEBHOOK_URL,
@@ -422,34 +432,34 @@ try
             },
             Secret = "test-secret_12345",
         });
-        Console.WriteLine($"Подписка создана: {responseSubscribe.Success}, сообщение: {responseSubscribe.Message}");
+        TempSession.Write($"Подписка создана: {responseSubscribe.Success}, сообщение: {responseSubscribe.Message}");
     }
     else
     {
-        Console.WriteLine("SubscribeAsync пропущен: задайте C_TEST_WEBHOOK_URL с публичным HTTPS endpoint.");
+        TempSession.Write("SubscribeAsync пропущен: задайте C_TEST_WEBHOOK_URL с публичным HTTPS endpoint.");
     }
 
     if (enableDeleteSubscriptionTest)
     {
-        Console.WriteLine("Вызываем UnsubscribeAsync...");
+        TempSession.Write("Вызываем UnsubscribeAsync...");
         var responseUnsubscribe = await maxApiClient.UnsubscribeAsync(new DeleteSubscriptionRequest()
         {
             Url = string.IsNullOrWhiteSpace(deleteSubscriptionUrl) ? C_TEST_WEBHOOK_URL : deleteSubscriptionUrl,
         });
-        Console.WriteLine($"Подписка удалена: {responseUnsubscribe.Success}, сообщение: {responseUnsubscribe.Message}");
+        TempSession.Write($"Подписка удалена: {responseUnsubscribe.Success}, сообщение: {responseUnsubscribe.Message}");
     }
     else
     {
-        Console.WriteLine("UnsubscribeAsync пропущен: метод удаляет Webhook-подписку. Включите MAX_ENABLE_DELETE_SUBSCRIPTION_TEST=true и при необходимости задайте MAX_DELETE_SUBSCRIPTION_URL.");
+        TempSession.Write("UnsubscribeAsync пропущен: метод удаляет Webhook-подписку. Включите MAX_ENABLE_DELETE_SUBSCRIPTION_TEST=true и при необходимости задайте MAX_DELETE_SUBSCRIPTION_URL.");
     }
 
-    //var _ = maxApiClient.PollUpdatesWithCallback(
+    // var _ = maxApiClient.PollUpdatesWithCallback(
     //    async (update, client) =>
     //    {
     //        if (update is MessageCreatedUpdate messageCreated)
     //        {
-    //            Console.WriteLine($"Сообщение: {messageCreated.Message?.Body?.Text}");
-    //
+    //            TempSession.Write($"Сообщение: {messageCreated.Message?.Body?.Text}");
+    
     //            await client.SendMessageAsync(new SendMessageRequest
     //            {
     //                Text = messageCreated.Message?.Body?.Text,
@@ -460,12 +470,144 @@ try
     //    limit: 100,
     //    timeout: 90,
     //    types: new List<string> { UpdateTypes.MessageCreated }
-    //);
+    // );
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"Ошибка: {ex.Message}");
+    TempSession.Write($"Ошибка: {ex.Message}");
     Environment.Exit(1);
+}
+
+static async Task SaveMessageAttachmentsAsync(
+    IMaxBotClient maxApiClient,
+    TempSession temp,
+    MessageBody? body,
+    string? suffix = null)
+{
+    if (body?.Attachments is not { Count: > 0 } attachments)
+        return;
+
+    temp.Log($"  Вложений: {attachments.Count}");
+
+    var messageKey = TempSession.ToSafeFileName(body.Mid, suffix);
+    var attachmentRecords = new List<AttachmentRecord>();
+
+    for (var index = 0; index < attachments.Count; index++)
+    {
+        var attachment = attachments[index];
+        var record = new AttachmentRecord
+        {
+            Index = index,
+            ClrType = attachment.GetType().Name,
+        };
+
+        switch (attachment)
+        {
+            case ImageAttachment image when image.Payload is ImagePayload imagePayload:
+                record.Type = "image";
+                record.Url = imagePayload.Url;
+                record.Token = imagePayload.Token;
+                temp.Log($"  [image] url={imagePayload.Url}, token={imagePayload.Token}");
+                record.DownloadedPath = await temp.TryDownloadAsync(
+                    $"{messageKey}_{index}_image",
+                    imagePayload.Url,
+                    defaultExtension: ".jpg");
+                break;
+            case VideoAttachment video when video.Payload is VideoPayload videoPayload:
+                record.Type = "video";
+                record.Token = videoPayload.Token;
+                temp.Log($"  [video] token={videoPayload.Token}");
+                try
+                {
+                    var videoInfo = await GetVideoInfoWithRetry(maxApiClient, videoPayload.Token);
+                    record.VideoInfo = videoInfo;
+                    temp.Log($"    urls={videoInfo.Urls}, {videoInfo.Width}x{videoInfo.Height}, {videoInfo.Duration}s");
+
+                    var videoUrl = TryGetVideoUrl(videoInfo.Urls);
+                    record.Url = videoUrl;
+                    record.DownloadedPath = await temp.TryDownloadAsync(
+                        $"{messageKey}_{index}_video",
+                        videoUrl,
+                        defaultExtension: ".mp4");
+                }
+                catch (Exception ex)
+                {
+                    record.Error = ex.Message;
+                    temp.Log($"    не удалось получить info: {ex.Message}");
+                }
+                break;
+            case FileAttachment file when file.Payload is FilePayload filePayload:
+                record.Type = "file";
+                record.Url = filePayload.Url;
+                record.Token = filePayload.Token;
+                record.Filename = file.Filename;
+                temp.Log($"  [file] filename={file.Filename}, url={filePayload.Url}, token={filePayload.Token}");
+                record.DownloadedPath = await temp.TryDownloadAsync(
+                    $"{messageKey}_{index}_file",
+                    filePayload.Url,
+                    file.Filename);
+                break;
+            case AudioAttachment audio when audio.Payload is AudioPayload audioPayload:
+                record.Type = "audio";
+                record.Token = audioPayload.Token;
+                temp.Log($"  [audio] token={audioPayload.Token}");
+                break;
+            case StickerAttachment sticker when sticker.Payload is StickerPayload stickerPayload:
+                record.Type = "sticker";
+                record.Code = stickerPayload.Code;
+                temp.Log($"  [sticker] code={stickerPayload.Code}");
+                break;
+            case ContactAttachment contact when contact.Payload is ContactPayload contactPayload:
+                record.Type = "contact";
+                record.Name = contactPayload.Name;
+                record.Phone = contactPayload.VcfPhone;
+                temp.Log($"  [contact] name={contactPayload.Name}, phone={contactPayload.VcfPhone}");
+                break;
+            case LocationAttachment location when location.Payload is LocationPayload locationPayload:
+                record.Type = "location";
+                record.Latitude = locationPayload.Latitude;
+                record.Longitude = locationPayload.Longitude;
+                temp.Log($"  [location] lat={locationPayload.Latitude}, lon={locationPayload.Longitude}");
+                break;
+            case InlineKeyboardAttachment inlineKeyboard when inlineKeyboard.Payload is InlineKeyboardPayload keyboardPayload:
+                record.Type = "inline_keyboard";
+                record.Buttons = keyboardPayload.Buttons;
+                temp.Log("  [inline_keyboard]");
+                break;
+            default:
+                record.Type = attachment.GetType().Name;
+                temp.Log($"  [{attachment.GetType().Name}]");
+                break;
+        }
+
+        attachmentRecords.Add(record);
+    }
+
+    var summary = new MessageAttachmentsSummary
+    {
+        Mid = body.Mid,
+        Text = body.Text,
+        Attachments = attachmentRecords,
+    };
+
+    await temp.SaveJsonAsync(Path.Combine("attachments", $"{messageKey}.json"), summary);
+}
+
+static string? TryGetVideoUrl(JsonElement? urls)
+{
+    if (urls is not { } element || element.ValueKind != JsonValueKind.Object)
+        return null;
+
+    if (element.TryGetProperty("mp4_480", out var mp4480) && mp4480.ValueKind == JsonValueKind.String)
+        return mp4480.GetString();
+
+    foreach (var property in element.EnumerateObject())
+    {
+        if (property.Value.ValueKind == JsonValueKind.String)
+            return property.Value.GetString();
+    }
+
+    return null;
 }
 
 static async Task SendMessageWithAttachmentRetry(IMaxBotClient maxApiClient, SendMessageRequest request)
@@ -487,7 +629,7 @@ static async Task SendMessageWithAttachmentRetry(IMaxBotClient maxApiClient, Sen
         catch (MaxBotClientException ex) when (IsAttachmentNotReady(ex) && attempt < retryDelays.Length)
         {
             var delay = retryDelays[attempt];
-            Console.WriteLine($"Вложение еще обрабатывается, повтор через {delay.TotalSeconds:0} сек...");
+            TempSession.Write($"Вложение еще обрабатывается, повтор через {delay.TotalSeconds:0} сек...");
             await Task.Delay(delay);
         }
     }
@@ -517,8 +659,160 @@ static async Task<VideoInfoResponse> GetVideoInfoWithRetry(IMaxBotClient maxApiC
         catch (MaxBotClientException ex) when (IsAttachmentNotReady(ex) && attempt < retryDelays.Length)
         {
             var delay = retryDelays[attempt];
-            Console.WriteLine($"Видео еще обрабатывается, повтор через {delay.TotalSeconds:0} сек...");
+            TempSession.Write($"Видео еще обрабатывается, повтор через {delay.TotalSeconds:0} сек...");
             await Task.Delay(delay);
         }
     }
+}
+
+sealed class TempSession : IAsyncDisposable
+{
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+
+    private readonly StreamWriter _logWriter;
+    private readonly HttpClient _httpClient = new();
+
+    public string SessionDirectory { get; }
+    public string AttachmentsDirectory { get; }
+
+    private TempSession(string sessionDirectory)
+    {
+        Current = this;
+        SessionDirectory = sessionDirectory;
+        AttachmentsDirectory = Path.Combine(sessionDirectory, "attachments");
+        Directory.CreateDirectory(AttachmentsDirectory);
+
+        _logWriter = new StreamWriter(Path.Combine(sessionDirectory, "log.txt"), append: false)
+        {
+            AutoFlush = true,
+        };
+    }
+
+    public static TempSession Create()
+    {
+        var tempDirectory = Path.Combine(GetProjectDirectory(), "Temp");
+        var attachmentsDirectory = Path.Combine(tempDirectory, "attachments");
+
+        Directory.CreateDirectory(tempDirectory);
+        if (Directory.Exists(attachmentsDirectory))
+            Directory.Delete(attachmentsDirectory, recursive: true);
+        Directory.CreateDirectory(attachmentsDirectory);
+
+        return new TempSession(tempDirectory);
+    }
+
+    internal static TempSession? Current { get; private set; }
+
+    public static void Write(string message)
+    {
+        if (Current is not null)
+            Current.Log(message);
+        else
+            TempSession.Write(message);
+    }
+
+    private static string GetProjectDirectory()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory != null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "TestApp.csproj")))
+                return directory.FullName;
+
+            directory = directory.Parent;
+        }
+
+        return Directory.GetCurrentDirectory();
+    }
+
+    public void Log(string message)
+    {
+        var line = $"[{DateTime.Now:HH:mm:ss}] {message}";
+        Console.WriteLine(line);
+        _logWriter.WriteLine(line);
+    }
+
+    public async Task SaveJsonAsync(string relativePath, object value)
+    {
+        var fullPath = Path.Combine(SessionDirectory, relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+
+        var json = JsonSerializer.Serialize(value, JsonOptions);
+        await File.WriteAllTextAsync(fullPath, json);
+        Log($"  сохранено: {relativePath}");
+    }
+
+    public async Task<string?> TryDownloadAsync(string baseFileName, string? url, string? preferredFileName = null, string defaultExtension = ".bin")
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return null;
+
+        try
+        {
+            var extension = !string.IsNullOrWhiteSpace(preferredFileName)
+                ? Path.GetExtension(preferredFileName)
+                : Path.GetExtension(new Uri(url).AbsolutePath);
+
+            if (string.IsNullOrWhiteSpace(extension))
+                extension = defaultExtension;
+
+            var fileName = $"{baseFileName}{extension}";
+            var fullPath = Path.Combine(AttachmentsDirectory, fileName);
+            var bytes = await _httpClient.GetByteArrayAsync(url);
+            await File.WriteAllBytesAsync(fullPath, bytes);
+            Log($"  скачано: attachments/{fileName}");
+            return $"attachments/{fileName}";
+        }
+        catch (Exception ex)
+        {
+            Log($"  не удалось скачать {url}: {ex.Message}");
+            return null;
+        }
+    }
+
+    public static string ToSafeFileName(string? value, string? suffix = null)
+    {
+        var source = string.IsNullOrWhiteSpace(value) ? "message" : value;
+        var invalidChars = Path.GetInvalidFileNameChars();
+        var safe = new string(source.Select(ch => invalidChars.Contains(ch) ? '_' : ch).ToArray());
+        return string.IsNullOrWhiteSpace(suffix) ? safe : $"{safe}_{suffix}";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _httpClient.Dispose();
+        await _logWriter.DisposeAsync();
+        if (ReferenceEquals(Current, this))
+            Current = null;
+    }
+}
+
+sealed class MessageAttachmentsSummary
+{
+    public string? Mid { get; set; }
+    public string? Text { get; set; }
+    public List<AttachmentRecord> Attachments { get; set; } = [];
+}
+
+sealed class AttachmentRecord
+{
+    public int Index { get; set; }
+    public string? Type { get; set; }
+    public string? ClrType { get; set; }
+    public string? Url { get; set; }
+    public string? Token { get; set; }
+    public string? Filename { get; set; }
+    public string? Code { get; set; }
+    public string? Name { get; set; }
+    public string? Phone { get; set; }
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
+    public string? DownloadedPath { get; set; }
+    public string? Error { get; set; }
+    public VideoInfoResponse? VideoInfo { get; set; }
+    public List<List<Button>>? Buttons { get; set; }
 }

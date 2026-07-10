@@ -6,6 +6,12 @@ namespace MAX.Bot.Interfaces.Models.Request.Message.Attachment.Payloads;
 public sealed class FilePayload: AttachmentPayload
 {
     /// <summary>
+    /// URL загруженного файла
+    /// </summary>
+    [JsonPropertyName("url")]
+    public string? Url { get; set; }
+
+    /// <summary>
     /// Токен — уникальный ID загруженного медиафайла
     /// </summary>
     [JsonPropertyName("token")]
