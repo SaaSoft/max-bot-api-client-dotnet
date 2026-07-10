@@ -43,4 +43,26 @@ public record VideoInfoResponse
     /// </summary>
     [JsonPropertyName("duration")]
     public long Duration { get; set; }
+
+    /// <summary>
+    /// Возвращает предпочтительный URL для скачивания видео.
+    /// </summary>
+    public string? TryGetDownloadUrl() => TryGetDownloadUrl(Urls);
+
+    internal static string? TryGetDownloadUrl(JsonElement? urls)
+    {
+        if (urls is not { } element || element.ValueKind != JsonValueKind.Object)
+            return null;
+
+        if (element.TryGetProperty("mp4_480", out var mp4480) && mp4480.ValueKind == JsonValueKind.String)
+            return mp4480.GetString();
+
+        foreach (var property in element.EnumerateObject())
+        {
+            if (property.Value.ValueKind == JsonValueKind.String)
+                return property.Value.GetString();
+        }
+
+        return null;
+    }
 }

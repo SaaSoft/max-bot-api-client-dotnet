@@ -490,124 +490,65 @@ static async Task SaveMessageAttachmentsAsync(
     temp.Log($"  Вложений: {attachments.Count}");
 
     var messageKey = TempSession.ToSafeFileName(body.Mid, suffix);
-    var attachmentRecords = new List<AttachmentRecord>();
 
     for (var index = 0; index < attachments.Count; index++)
     {
         var attachment = attachments[index];
-        var record = new AttachmentRecord
-        {
-            Index = index,
-            ClrType = attachment.GetType().Name,
-        };
 
         switch (attachment)
         {
-            case ImageAttachment image when image.Payload is ImagePayload imagePayload:
-                record.Type = "image";
-                record.Url = imagePayload.Url;
-                record.Token = imagePayload.Token;
-                temp.Log($"  [image] url={imagePayload.Url}, token={imagePayload.Token}");
-                record.DownloadedPath = await temp.TryDownloadAsync(
+            case ImageAttachment image:
+                temp.Log($"  [image] url={image.Payload.Url}, token={image.Payload.Token}");
+                await temp.TryDownloadAsync(
                     $"{messageKey}_{index}_image",
-                    imagePayload.Url,
+                    await image.GetDownloadUrlAsync(maxApiClient),
                     defaultExtension: ".jpg");
                 break;
-            case VideoAttachment video when video.Payload is VideoPayload videoPayload:
-                record.Type = "video";
-                record.Token = videoPayload.Token;
-                temp.Log($"  [video] token={videoPayload.Token}");
+            case VideoAttachment video:
+                temp.Log($"  [video] token={video.Payload.Token}");
                 try
                 {
-                    var videoInfo = await GetVideoInfoWithRetry(maxApiClient, videoPayload.Token);
-                    record.VideoInfo = videoInfo;
+                    var videoInfo = await GetVideoInfoWithRetry(maxApiClient, video.Payload.Token);
                     temp.Log($"    urls={videoInfo.Urls}, {videoInfo.Width}x{videoInfo.Height}, {videoInfo.Duration}s");
-
-                    var videoUrl = TryGetVideoUrl(videoInfo.Urls);
-                    record.Url = videoUrl;
-                    record.DownloadedPath = await temp.TryDownloadAsync(
+                    await temp.TryDownloadAsync(
                         $"{messageKey}_{index}_video",
-                        videoUrl,
+                        videoInfo.TryGetDownloadUrl(),
                         defaultExtension: ".mp4");
                 }
                 catch (Exception ex)
                 {
-                    record.Error = ex.Message;
                     temp.Log($"    не удалось получить info: {ex.Message}");
                 }
                 break;
-            case FileAttachment file when file.Payload is FilePayload filePayload:
-                record.Type = "file";
-                record.Url = filePayload.Url;
-                record.Token = filePayload.Token;
-                record.Filename = file.Filename;
-                temp.Log($"  [file] filename={file.Filename}, url={filePayload.Url}, token={filePayload.Token}");
-                record.DownloadedPath = await temp.TryDownloadAsync(
+            case FileAttachment file:
+                temp.Log($"  [file] filename={file.Filename}, url={file.Payload.Url}, token={file.Payload.Token}");
+                await temp.TryDownloadAsync(
                     $"{messageKey}_{index}_file",
-                    filePayload.Url,
-                    file.Filename);
+                    await file.GetDownloadUrlAsync(maxApiClient),
+                    file.GetFileName());
                 break;
-            case AudioAttachment audio when audio.Payload is AudioPayload audioPayload:
-                record.Type = "audio";
-                record.Token = audioPayload.Token;
-                temp.Log($"  [audio] token={audioPayload.Token}");
+            case AudioAttachment audio:
+                temp.Log($"  [audio] token={audio.Payload.Token}");
                 break;
-            case StickerAttachment sticker when sticker.Payload is StickerPayload stickerPayload:
-                record.Type = "sticker";
-                record.Code = stickerPayload.Code;
-                temp.Log($"  [sticker] code={stickerPayload.Code}");
+            case StickerAttachment sticker:
+                temp.Log($"  [sticker] code={sticker.Payload.Code}");
                 break;
-            case ContactAttachment contact when contact.Payload is ContactPayload contactPayload:
-                record.Type = "contact";
-                record.Name = contactPayload.Name;
-                record.Phone = contactPayload.VcfPhone;
-                temp.Log($"  [contact] name={contactPayload.Name}, phone={contactPayload.VcfPhone}");
+            case ContactAttachment contact:
+                temp.Log($"  [contact] name={contact.Payload.Name}, phone={contact.Payload.VcfPhone}");
                 break;
-            case LocationAttachment location when location.Payload is LocationPayload locationPayload:
-                record.Type = "location";
-                record.Latitude = locationPayload.Latitude;
-                record.Longitude = locationPayload.Longitude;
-                temp.Log($"  [location] lat={locationPayload.Latitude}, lon={locationPayload.Longitude}");
+            case LocationAttachment location:
+                temp.Log($"  [location] lat={location.Payload.Latitude}, lon={location.Payload.Longitude}");
                 break;
-            case InlineKeyboardAttachment inlineKeyboard when inlineKeyboard.Payload is InlineKeyboardPayload keyboardPayload:
-                record.Type = "inline_keyboard";
-                record.Buttons = keyboardPayload.Buttons;
-                temp.Log("  [inline_keyboard]");
+            case InlineKeyboardAttachment inlineKeyboard:
+                temp.Log($"  [inline_keyboard] rows={inlineKeyboard.Payload.Buttons?.Count ?? 0}");
                 break;
             default:
-                record.Type = attachment.GetType().Name;
                 temp.Log($"  [{attachment.GetType().Name}]");
                 break;
         }
-
-        attachmentRecords.Add(record);
     }
 
-    var summary = new MessageAttachmentsSummary
-    {
-        Mid = body.Mid,
-        Text = body.Text,
-        Attachments = attachmentRecords,
-    };
-
-    await temp.SaveJsonAsync(Path.Combine("attachments", $"{messageKey}.json"), summary);
-}
-
-static string? TryGetVideoUrl(JsonElement? urls)
-{
-    if (urls is not { } element || element.ValueKind != JsonValueKind.Object)
-        return null;
-
-    if (element.TryGetProperty("mp4_480", out var mp4480) && mp4480.ValueKind == JsonValueKind.String)
-        return mp4480.GetString();
-
-    foreach (var property in element.EnumerateObject())
-    {
-        if (property.Value.ValueKind == JsonValueKind.String)
-            return property.Value.GetString();
-    }
-
-    return null;
+    await temp.SaveJsonAsync(Path.Combine("attachments", $"{messageKey}.json"), body);
 }
 
 static async Task SendMessageWithAttachmentRetry(IMaxBotClient maxApiClient, SendMessageRequest request)
@@ -789,30 +730,4 @@ sealed class TempSession : IAsyncDisposable
         if (ReferenceEquals(Current, this))
             Current = null;
     }
-}
-
-sealed class MessageAttachmentsSummary
-{
-    public string? Mid { get; set; }
-    public string? Text { get; set; }
-    public List<AttachmentRecord> Attachments { get; set; } = [];
-}
-
-sealed class AttachmentRecord
-{
-    public int Index { get; set; }
-    public string? Type { get; set; }
-    public string? ClrType { get; set; }
-    public string? Url { get; set; }
-    public string? Token { get; set; }
-    public string? Filename { get; set; }
-    public string? Code { get; set; }
-    public string? Name { get; set; }
-    public string? Phone { get; set; }
-    public double? Latitude { get; set; }
-    public double? Longitude { get; set; }
-    public string? DownloadedPath { get; set; }
-    public string? Error { get; set; }
-    public VideoInfoResponse? VideoInfo { get; set; }
-    public List<List<Button>>? Buttons { get; set; }
 }
