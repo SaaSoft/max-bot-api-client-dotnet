@@ -20,18 +20,21 @@ public abstract class Attachment
     /// <summary>
     /// Возвращает URL для скачивания вложения, если он доступен напрямую или через API.
     /// </summary>
-    public virtual Task<string?> GetDownloadUrlAsync(
+    public virtual async Task<string?> GetDownloadUrlAsync(
         IMaxBotClient client,
         CancellationToken cancellationToken = default)
     {
-        return this switch
+        switch (this)
         {
-            ImageAttachment image => Task.FromResult<string?>(image.Payload.Url),
-            FileAttachment file => Task.FromResult(file.Payload.Url),
-            VideoAttachment video => GetVideoDownloadUrlAsync(client, video, cancellationToken),
-            _ => Task.FromResult<string?>(null),
-
-        };
+            case ImageAttachment image:
+                return image.Payload.Url;
+            case FileAttachment file:
+                return file.Payload.Url;
+            case VideoAttachment video:
+                return (await client.GetVideoAsync(video.Payload.Token, cancellationToken)).TryGetDownloadUrl();
+            default:
+                return null;
+        }
     }
 
     /// <summary>
@@ -39,16 +42,6 @@ public abstract class Attachment
     /// </summary>
     public virtual string? GetFileName() =>
         this is FileAttachment file ? file.Filename : null;
-
-    private static async Task<string?> GetVideoDownloadUrlAsync(
-        IMaxBotClient client,
-        VideoAttachment video,
-        CancellationToken cancellationToken)
-    {
-        var videoInfo = await client.GetVideoAsync(video.Payload.Token, cancellationToken);
-        return videoInfo.TryGetDownloadUrl();
-    }
-
 }
 
 public abstract class AttachmentPayload { }

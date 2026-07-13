@@ -134,7 +134,7 @@ try
         foreach (var message in messages)
         {
             temp.Log($"Сообщение {message.Body?.Mid}: {message.Body?.Text}");
-            await SaveMessageAttachmentsAsync(maxApiClient, temp, message.Body);
+            await temp.SaveMessageAttachmentsAsync(maxApiClient, message.Body);
         }
 
         var lastMessageId = messages.LastOrDefault()?.Body?.Mid;
@@ -143,7 +143,7 @@ try
             temp.Log("Вызываем GetMessageByIdAsync...");
             var responseById = await maxApiClient.GetMessageByIdAsync(lastMessageId);
             temp.Log($"Получено {responseById?.Body?.Text}:");
-            await SaveMessageAttachmentsAsync(maxApiClient, temp, responseById?.Body, "by-id");
+            await temp.SaveMessageAttachmentsAsync(maxApiClient, responseById?.Body, "by-id");
 
             TempSession.Write("Вызываем EditMessageByIdAsync...");
             var responseEdit = await maxApiClient.EditMessageByIdAsync(lastMessageId, new SendMessageRequest()
@@ -478,133 +478,15 @@ catch (Exception ex)
     Environment.Exit(1);
 }
 
-static async Task SaveMessageAttachmentsAsync(
-    IMaxBotClient maxApiClient,
-    TempSession temp,
-    MessageBody? body,
-    string? suffix = null)
-{
-    if (body?.Attachments is not { Count: > 0 } attachments)
-        return;
+static async Task SendMessageWithAttachmentRetry(IMaxBotClient maxApiClient, SendMessageRequest request) =>
+    await TempSession.RetryOnAttachmentNotReadyAsync(
+        () => maxApiClient.SendMessageAsync(request),
+        "Вложение еще обрабатывается");
 
-    temp.Log($"  Вложений: {attachments.Count}");
-
-    var messageKey = TempSession.ToSafeFileName(body.Mid, suffix);
-
-    for (var index = 0; index < attachments.Count; index++)
-    {
-        var attachment = attachments[index];
-
-        switch (attachment)
-        {
-            case ImageAttachment image:
-                temp.Log($"  [image] url={image.Payload.Url}, token={image.Payload.Token}");
-                await temp.TryDownloadAsync(
-                    $"{messageKey}_{index}_image",
-                    await image.GetDownloadUrlAsync(maxApiClient),
-                    defaultExtension: ".jpg");
-                break;
-            case VideoAttachment video:
-                temp.Log($"  [video] token={video.Payload.Token}");
-                try
-                {
-                    var videoInfo = await GetVideoInfoWithRetry(maxApiClient, video.Payload.Token);
-                    temp.Log($"    urls={videoInfo.Urls}, {videoInfo.Width}x{videoInfo.Height}, {videoInfo.Duration}s");
-                    await temp.TryDownloadAsync(
-                        $"{messageKey}_{index}_video",
-                        videoInfo.TryGetDownloadUrl(),
-                        defaultExtension: ".mp4");
-                }
-                catch (Exception ex)
-                {
-                    temp.Log($"    не удалось получить info: {ex.Message}");
-                }
-                break;
-            case FileAttachment file:
-                temp.Log($"  [file] filename={file.Filename}, url={file.Payload.Url}, token={file.Payload.Token}");
-                await temp.TryDownloadAsync(
-                    $"{messageKey}_{index}_file",
-                    await file.GetDownloadUrlAsync(maxApiClient),
-                    file.GetFileName());
-                break;
-            case AudioAttachment audio:
-                temp.Log($"  [audio] token={audio.Payload.Token}");
-                break;
-            case StickerAttachment sticker:
-                temp.Log($"  [sticker] code={sticker.Payload.Code}");
-                break;
-            case ContactAttachment contact:
-                temp.Log($"  [contact] name={contact.Payload.Name}, phone={contact.Payload.VcfPhone}");
-                break;
-            case LocationAttachment location:
-                temp.Log($"  [location] lat={location.Payload.Latitude}, lon={location.Payload.Longitude}");
-                break;
-            case InlineKeyboardAttachment inlineKeyboard:
-                temp.Log($"  [inline_keyboard] rows={inlineKeyboard.Payload.Buttons?.Count ?? 0}");
-                break;
-            default:
-                temp.Log($"  [{attachment.GetType().Name}]");
-                break;
-        }
-    }
-
-    await temp.SaveJsonAsync(Path.Combine("attachments", $"{messageKey}.json"), body);
-}
-
-static async Task SendMessageWithAttachmentRetry(IMaxBotClient maxApiClient, SendMessageRequest request)
-{
-    var retryDelays = new[]
-    {
-        TimeSpan.FromSeconds(2),
-        TimeSpan.FromSeconds(5),
-        TimeSpan.FromSeconds(10),
-    };
-
-    for (var attempt = 0; ; attempt++)
-    {
-        try
-        {
-            await maxApiClient.SendMessageAsync(request);
-            return;
-        }
-        catch (MaxBotClientException ex) when (IsAttachmentNotReady(ex) && attempt < retryDelays.Length)
-        {
-            var delay = retryDelays[attempt];
-            TempSession.Write($"Вложение еще обрабатывается, повтор через {delay.TotalSeconds:0} сек...");
-            await Task.Delay(delay);
-        }
-    }
-}
-
-static bool IsAttachmentNotReady(MaxBotClientException ex)
-{
-    return ex.Message.Contains("attachment.not.ready", StringComparison.OrdinalIgnoreCase) ||
-           ex.Message.Contains("not.processed", StringComparison.OrdinalIgnoreCase);
-}
-
-static async Task<VideoInfoResponse> GetVideoInfoWithRetry(IMaxBotClient maxApiClient, string videoToken)
-{
-    var retryDelays = new[]
-    {
-        TimeSpan.FromSeconds(2),
-        TimeSpan.FromSeconds(5),
-        TimeSpan.FromSeconds(10),
-    };
-
-    for (var attempt = 0; ; attempt++)
-    {
-        try
-        {
-            return await maxApiClient.GetVideoAsync(videoToken);
-        }
-        catch (MaxBotClientException ex) when (IsAttachmentNotReady(ex) && attempt < retryDelays.Length)
-        {
-            var delay = retryDelays[attempt];
-            TempSession.Write($"Видео еще обрабатывается, повтор через {delay.TotalSeconds:0} сек...");
-            await Task.Delay(delay);
-        }
-    }
-}
+static Task<VideoInfoResponse> GetVideoInfoWithRetry(IMaxBotClient maxApiClient, string videoToken) =>
+    TempSession.RetryOnAttachmentNotReadyAsync(
+        () => maxApiClient.GetVideoAsync(videoToken),
+        "Видео еще обрабатывается");
 
 sealed class TempSession : IAsyncDisposable
 {
@@ -653,8 +535,92 @@ sealed class TempSession : IAsyncDisposable
         if (Current is not null)
             Current.Log(message);
         else
-            TempSession.Write(message);
+            Console.WriteLine(message);
     }
+
+    public async Task SaveMessageAttachmentsAsync(IMaxBotClient client, MessageBody? body, string? suffix = null)
+    {
+        if (body?.Attachments is not { Count: > 0 } attachments)
+            return;
+
+        Log($"  Вложений: {attachments.Count}");
+
+        var messageKey = ToSafeFileName(body.Mid, suffix);
+        for (var index = 0; index < attachments.Count; index++)
+            await ProcessAttachmentAsync(client, attachments[index], $"{messageKey}_{index}");
+
+        await SaveJsonAsync(Path.Combine("attachments", $"{messageKey}.json"), body);
+    }
+
+    private async Task ProcessAttachmentAsync(IMaxBotClient client, Attachment attachment, string fileBaseName)
+    {
+        Log($"  {JsonSerializer.Serialize(attachment, JsonOptions)}");
+
+        if (attachment is not (ImageAttachment or VideoAttachment or FileAttachment))
+            return;
+
+        var url = attachment is VideoAttachment
+            ? await RetryOnAttachmentNotReadyAsync(() => attachment.GetDownloadUrlAsync(client), "Видео еще обрабатывается")
+            : await attachment.GetDownloadUrlAsync(client);
+
+        var defaultExtension = attachment switch
+        {
+            ImageAttachment => ".jpg",
+            VideoAttachment => ".mp4",
+            _ => ".bin",
+        };
+
+        await TryDownloadAsync(
+            $"{fileBaseName}_{GetAttachmentKind(attachment)}",
+            url,
+            attachment.GetFileName(),
+            defaultExtension);
+    }
+
+    private static string GetAttachmentKind(Attachment attachment) => attachment switch
+    {
+        ImageAttachment => "image",
+        VideoAttachment => "video",
+        FileAttachment => "file",
+        _ => "attachment",
+    };
+
+    internal static async Task RetryOnAttachmentNotReadyAsync(Func<Task> action, string message)
+    {
+        await RetryOnAttachmentNotReadyAsync(async () =>
+        {
+            await action();
+            return true;
+        }, message);
+    }
+
+    internal static async Task<T> RetryOnAttachmentNotReadyAsync<T>(Func<Task<T>> action, string message)
+    {
+        var retryDelays = new[]
+        {
+            TimeSpan.FromSeconds(2),
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromSeconds(10),
+        };
+
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return await action();
+            }
+            catch (MaxBotClientException ex) when (IsAttachmentNotReady(ex) && attempt < retryDelays.Length)
+            {
+                var delay = retryDelays[attempt];
+                Write($"{message}, повтор через {delay.TotalSeconds:0} сек...");
+                await Task.Delay(delay);
+            }
+        }
+    }
+
+    private static bool IsAttachmentNotReady(MaxBotClientException ex) =>
+        ex.Message.Contains("attachment.not.ready", StringComparison.OrdinalIgnoreCase) ||
+        ex.Message.Contains("not.processed", StringComparison.OrdinalIgnoreCase);
 
     private static string GetProjectDirectory()
     {
