@@ -123,6 +123,45 @@ public class BotService
 }
 ```
 
+## Скачивание файлов
+
+```csharp
+using MAX.Bot.Interfaces.Models.Attachment;
+using MAX.Bot.Interfaces.Models.Response;
+
+var message = await botClient.GetMessageByIdAsync("message_id");
+
+foreach (var attachment in message.Body?.Attachments ?? [])
+{
+    try
+    {
+        var result = await botClient.DownloadAttachmentAsync(attachment, new DownloadAttachmentOptions
+        {
+            FilePath = Path.Combine("downloads", message.Body!.Mid!),
+            VideoQuality = VideoQuality.Mp4_720,
+        });
+
+        Console.WriteLine($"Сохранено: {result.SavedFilePath}");
+    }
+    catch (NotSupportedException)
+    {
+        // sticker, keyboard и др. — скачивание не поддерживается
+    }
+}
+```
+
+Без `FilePath` содержимое возвращается в `result.Content`:
+
+```csharp
+var result = await botClient.DownloadAttachmentAsync(attachment, new DownloadAttachmentOptions
+{
+    VideoQuality = VideoQuality.Mp4_720,
+});
+
+var content = result.Content!;
+Console.WriteLine($"Получено {content.Length} байт");
+```
+
 ## API методов
 
 Документация API методов для реализации в библиотеке.

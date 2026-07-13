@@ -8,6 +8,7 @@ using MAX.Bot.Interfaces.Models.Request.Message.Attachment;
 using MAX.Bot.Interfaces.Models.Request.Message.Attachment.Payloads;
 using MAX.Bot.Interfaces.Models.Response;
 using Microsoft.Extensions.DependencyInjection;
+using System.Text;
 using Attachment = MAX.Bot.Interfaces.Models.Request.Message.Attachment.Attachment;
 
 const string C_BOT_API = "";
@@ -173,10 +174,11 @@ try
                     {
                         var result = await maxApiClient.DownloadAttachmentAsync(attachment, new DownloadAttachmentOptions
                         {
-                            FilePath = Path.Combine(temp.AttachmentsDirectory, $"{responseById.Body.Mid}_by-id_{index}"),
                             VideoQuality = VideoQuality.Mp4_720,
                         });
-                        temp.Log($"  скачано: {Path.GetRelativePath(temp.SessionDirectory, result.SavedFilePath!)}");
+                        var content = result.Content!;
+                        var preview = Encoding.UTF8.GetString(content, 0, Math.Min(100, content.Length));
+                        temp.Log($"  получено {content.Length} байт, начало: {preview}");
                     }
                     catch (NotSupportedException)
                     {
@@ -202,6 +204,37 @@ try
             var responseDelete = await maxApiClient.DeleteMessageByIdAsync(firstMessageId);
             TempSession.Write($"Удалено {responseDelete?.Success}:");
         }
+
+        var largeVideoFilePath = Path.Combine(AppContext.BaseDirectory, "Files", "large_video.mp4");
+
+        TempSession.Write("Вызываем UploadsAsync для large_video.mp4...");
+        await using var largeVideoFileContent = File.OpenRead(largeVideoFilePath);
+        var largeVideoToken = await maxApiClient.UploadsAsync(new UploadRequest()
+        {
+            Type = UploadType.Video,
+            Content = largeVideoFileContent,
+            FileName = Path.GetFileName(largeVideoFilePath),
+            ContentType = "video/mp4",
+        });
+        TempSession.Write($"Получен токен large_video.mp4: {largeVideoToken}");
+
+        TempSession.Write("Отправляем сообщение с large_video.mp4...");
+        var largeVideoResponse = await maxApiClient.SendMessageAsync(new SendMessageRequest()
+        {
+            ChatId = C_TEST_CHAT_ID,
+            Text = "Большое видео large_video.mp4",
+            Attachments = new List<Attachment>
+            {
+                new VideoAttachment
+                {
+                    Payload = new VideoPayload
+                    {
+                        Token = largeVideoToken,
+                    }
+                }
+            }
+        });
+        TempSession.Write($"Сообщение с large_video.mp4 отправлено: {largeVideoResponse.Message?.Body?.Mid}");
     }
 
     temp.Log($"Готово. Логи и вложения: {temp.SessionDirectory}");
