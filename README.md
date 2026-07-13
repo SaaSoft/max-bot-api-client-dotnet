@@ -6,7 +6,8 @@
 
 - ✅ **Долгосрочный polling** — обработка событий в реальном времени
 - ✅ **Dependency Injection** — готовая интеграция с ASP.NET Core
-- ✅ **Гибкая конфигурация** — несколько способов создания клиента
+- ✅ **Вложения** — скачивание image/video/file, выбор качества видео
+- ✅ **Повторы** — автоматические retry при обработке вложений API
 
 ## Установка
 
@@ -22,7 +23,7 @@ dotnet add package SaaSoft.MAX.Bot
 
 ### Через PackageReference
 ```xml
-<PackageReference Include="SaaSoft.MAX.Bot" Version="1.1.0" />
+<PackageReference Include="SaaSoft.MAX.Bot" Version="1.2.0" />
 ```
 
 ### Сертификаты Минцифры
@@ -60,7 +61,7 @@ await botClient.SendMessageAsync(new SendMessageRequest
 });
 
 // Получение обновлений
-var _ = maxApiClient.PollUpdatesWithCallback(
+var _ = botClient.PollUpdatesWithCallback(
     async (update, client) =>
     {
         if (update is MessageCreatedUpdate messageCreated)
@@ -85,11 +86,14 @@ var _ = maxApiClient.PollUpdatesWithCallback(
 ### 1. Простой конструктор (рекомендуется для консольных приложений)
 
 ```csharp
+using MAX.Bot.Interfaces.Models.Attachment;
+
 // С токеном и таймаутом по умолчанию (30 секунд)
 var client = new MaxBotClient("your_token_here");
 
-// С кастомным таймаутом
-var client = new MaxBotClient("your_token_here", timeoutSeconds: 60);
+// С кастомным таймаутом и retry для вложений
+var client = new MaxBotClient("your_token_here", timeoutSeconds: 60,
+    attachmentRetryOptions: new AttachmentRetryOptions { MaxAttempts = 4, RetryDelay = TimeSpan.FromSeconds(2) });
 ```
 
 ### 2. Dependency Injection (рекомендуется для ASP.NET Core)

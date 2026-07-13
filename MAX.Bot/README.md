@@ -4,7 +4,7 @@
 
 ## Поддерживаемые платформы
 
-- **.NET 9.0** (рекомендуется для новых проектов)
+- **.NET 8.0 / 9.0 / 10.0**
 - **.NET Framework 4.6.2** (для совместимости с устаревшими системами)
 
 ## Особенности
@@ -28,7 +28,7 @@ dotnet add package SaaSoft.MAX.Bot
 
 ### Через PackageReference
 ```xml
-<PackageReference Include="SaaSoft.MAX.Bot" Version="1.1.2" />
+<PackageReference Include="SaaSoft.MAX.Bot" Version="1.2.0" />
 ```
 
 ## Быстрый старт
@@ -60,7 +60,7 @@ await botClient.SendMessageAsync(new SendMessageRequest
 });
 
 // Получение обновлений
-var _ = maxApiClient.PollUpdatesWithCallback(
+var _ = botClient.PollUpdatesWithCallback(
     async (update, client) =>
     {
         if (update is MessageCreatedUpdate messageCreated)
@@ -85,11 +85,14 @@ var _ = maxApiClient.PollUpdatesWithCallback(
 ### 1. Простой конструктор (рекомендуется для консольных приложений)
 
 ```csharp
+using MAX.Bot.Interfaces.Models.Attachment;
+
 // С токеном и таймаутом по умолчанию (30 секунд)
 var client = new MaxBotClient("your_token_here");
 
-// С кастомным таймаутом
-var client = new MaxBotClient("your_token_here", timeoutSeconds: 60);
+// С кастомным таймаутом и retry для вложений
+var client = new MaxBotClient("your_token_here", timeoutSeconds: 60,
+    attachmentRetryOptions: new AttachmentRetryOptions { MaxAttempts = 4, RetryDelay = TimeSpan.FromSeconds(2) });
 ```
 
 ### 2. Dependency Injection (рекомендуется для ASP.NET Core)

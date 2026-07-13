@@ -1,4 +1,3 @@
-using MAX.Bot.Interfaces;
 using MAX.Bot.Interfaces.Models.Request.Message.Attachment.Payloads;
 
 namespace MAX.Bot.Interfaces.Models.Request.Message.Attachment;
@@ -16,26 +15,6 @@ public abstract class Attachment
 {
     [JsonPropertyName("payload")]
     public AttachmentPayload? Payload { get; set; }
-
-    /// <summary>
-    /// Возвращает URL для скачивания вложения, если он доступен напрямую или через API.
-    /// </summary>
-    public virtual async Task<string?> GetDownloadUrlAsync(
-        IMaxBotClient client,
-        CancellationToken cancellationToken = default)
-    {
-        switch (this)
-        {
-            case ImageAttachment image:
-                return image.Payload.Url;
-            case FileAttachment file:
-                return file.Payload.Url;
-            case VideoAttachment video:
-                return (await client.GetVideoAsync(video.Payload.Token, cancellationToken)).TryGetDownloadUrl();
-            default:
-                return null;
-        }
-    }
 
     /// <summary>
     /// Возвращает предпочтительное имя файла для скачивания вложения.

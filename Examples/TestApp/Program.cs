@@ -1,8 +1,7 @@
-﻿using System.Text.Json;
-using MAX.Bot.Exceptions;
-using MAX.Bot.Extensions;
+﻿using MAX.Bot.Extensions;
 using MAX.Bot.Interfaces;
 using MAX.Bot.Interfaces.Models;
+using MAX.Bot.Interfaces.Models.Attachment;
 using MAX.Bot.Interfaces.Models.Request;
 using MAX.Bot.Interfaces.Models.Request.Message;
 using MAX.Bot.Interfaces.Models.Request.Message.Attachment;
@@ -134,7 +133,28 @@ try
         foreach (var message in messages)
         {
             temp.Log($"Сообщение {message.Body?.Mid}: {message.Body?.Text}");
-            await temp.SaveMessageAttachmentsAsync(maxApiClient, message.Body);
+
+            if (message.Body?.Attachments is not { Count: > 0 } attachments)
+                continue;
+
+            var index = 0;
+            foreach (var attachment in attachments)
+            {
+                try
+                {
+                    var result = await maxApiClient.DownloadAttachmentAsync(attachment, new DownloadAttachmentOptions
+                    {
+                        FilePath = Path.Combine(temp.AttachmentsDirectory, $"{message.Body.Mid}_{index}"),
+                        VideoQuality = VideoQuality.Mp4_720,
+                    });
+                    temp.Log($"  скачано: {Path.GetRelativePath(temp.SessionDirectory, result.SavedFilePath!)}");
+                }
+                catch (NotSupportedException)
+                {
+                }
+
+                index++;
+            }
         }
 
         var lastMessageId = messages.LastOrDefault()?.Body?.Mid;
@@ -143,7 +163,28 @@ try
             temp.Log("Вызываем GetMessageByIdAsync...");
             var responseById = await maxApiClient.GetMessageByIdAsync(lastMessageId);
             temp.Log($"Получено {responseById?.Body?.Text}:");
-            await temp.SaveMessageAttachmentsAsync(maxApiClient, responseById?.Body, "by-id");
+
+            if (responseById?.Body?.Attachments is { Count: > 0 } attachmentsById)
+            {
+                var index = 0;
+                foreach (var attachment in attachmentsById)
+                {
+                    try
+                    {
+                        var result = await maxApiClient.DownloadAttachmentAsync(attachment, new DownloadAttachmentOptions
+                        {
+                            FilePath = Path.Combine(temp.AttachmentsDirectory, $"{responseById.Body.Mid}_by-id_{index}"),
+                            VideoQuality = VideoQuality.Mp4_720,
+                        });
+                        temp.Log($"  скачано: {Path.GetRelativePath(temp.SessionDirectory, result.SavedFilePath!)}");
+                    }
+                    catch (NotSupportedException)
+                    {
+                    }
+
+                    index++;
+                }
+            }
 
             TempSession.Write("Вызываем EditMessageByIdAsync...");
             var responseEdit = await maxApiClient.EditMessageByIdAsync(lastMessageId, new SendMessageRequest()
@@ -351,7 +392,7 @@ try
     TempSession.Write($"Получен токен загруженного файла: {textFileToken}");
 
     TempSession.Write("Отправляем сообщение с файлом test.txt...");
-    await SendMessageWithAttachmentRetry(maxApiClient, new SendMessageRequest()
+    await maxApiClient.SendMessageAsync(new SendMessageRequest()
     {
         ChatId = C_TEST_CHAT_ID,
         Text = "Файл test.txt",
@@ -379,11 +420,11 @@ try
     TempSession.Write($"Получен токен загруженного видео: {videoToken}");
 
     TempSession.Write("Вызываем GetVideoAsync для video.mp4...");
-    var videoInfo = await GetVideoInfoWithRetry(maxApiClient, videoToken);
-    TempSession.Write($"Видео: token={videoInfo.Token}, width={videoInfo.Width}, height={videoInfo.Height}, duration={videoInfo.Duration}");
+    var videoInfo = await maxApiClient.GetVideoAsync(videoToken);
+    TempSession.Write($"Видео: token={videoInfo.Token}, width={videoInfo.Width}, height={videoInfo.Height}, duration={videoInfo.Duration}, url_720={videoInfo.TryGetDownloadUrl(VideoQuality.Mp4_720)}");
 
     TempSession.Write("Отправляем сообщение с видео video.mp4...");
-    await SendMessageWithAttachmentRetry(maxApiClient, new SendMessageRequest()
+    await maxApiClient.SendMessageAsync(new SendMessageRequest()
     {
         ChatId = C_TEST_CHAT_ID,
         Text = "Видео video.mp4",
@@ -478,26 +519,9 @@ catch (Exception ex)
     Environment.Exit(1);
 }
 
-static async Task SendMessageWithAttachmentRetry(IMaxBotClient maxApiClient, SendMessageRequest request) =>
-    await TempSession.RetryOnAttachmentNotReadyAsync(
-        () => maxApiClient.SendMessageAsync(request),
-        "Вложение еще обрабатывается");
-
-static Task<VideoInfoResponse> GetVideoInfoWithRetry(IMaxBotClient maxApiClient, string videoToken) =>
-    TempSession.RetryOnAttachmentNotReadyAsync(
-        () => maxApiClient.GetVideoAsync(videoToken),
-        "Видео еще обрабатывается");
-
 sealed class TempSession : IAsyncDisposable
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    };
-
     private readonly StreamWriter _logWriter;
-    private readonly HttpClient _httpClient = new();
 
     public string SessionDirectory { get; }
     public string AttachmentsDirectory { get; }
@@ -538,90 +562,6 @@ sealed class TempSession : IAsyncDisposable
             Console.WriteLine(message);
     }
 
-    public async Task SaveMessageAttachmentsAsync(IMaxBotClient client, MessageBody? body, string? suffix = null)
-    {
-        if (body?.Attachments is not { Count: > 0 } attachments)
-            return;
-
-        Log($"  Вложений: {attachments.Count}");
-
-        var messageKey = ToSafeFileName(body.Mid, suffix);
-        for (var index = 0; index < attachments.Count; index++)
-            await ProcessAttachmentAsync(client, attachments[index], $"{messageKey}_{index}");
-
-        await SaveJsonAsync(Path.Combine("attachments", $"{messageKey}.json"), body);
-    }
-
-    private async Task ProcessAttachmentAsync(IMaxBotClient client, Attachment attachment, string fileBaseName)
-    {
-        Log($"  {JsonSerializer.Serialize(attachment, JsonOptions)}");
-
-        if (attachment is not (ImageAttachment or VideoAttachment or FileAttachment))
-            return;
-
-        var url = attachment is VideoAttachment
-            ? await RetryOnAttachmentNotReadyAsync(() => attachment.GetDownloadUrlAsync(client), "Видео еще обрабатывается")
-            : await attachment.GetDownloadUrlAsync(client);
-
-        var defaultExtension = attachment switch
-        {
-            ImageAttachment => ".jpg",
-            VideoAttachment => ".mp4",
-            _ => ".bin",
-        };
-
-        await TryDownloadAsync(
-            $"{fileBaseName}_{GetAttachmentKind(attachment)}",
-            url,
-            attachment.GetFileName(),
-            defaultExtension);
-    }
-
-    private static string GetAttachmentKind(Attachment attachment) => attachment switch
-    {
-        ImageAttachment => "image",
-        VideoAttachment => "video",
-        FileAttachment => "file",
-        _ => "attachment",
-    };
-
-    internal static async Task RetryOnAttachmentNotReadyAsync(Func<Task> action, string message)
-    {
-        await RetryOnAttachmentNotReadyAsync(async () =>
-        {
-            await action();
-            return true;
-        }, message);
-    }
-
-    internal static async Task<T> RetryOnAttachmentNotReadyAsync<T>(Func<Task<T>> action, string message)
-    {
-        var retryDelays = new[]
-        {
-            TimeSpan.FromSeconds(2),
-            TimeSpan.FromSeconds(5),
-            TimeSpan.FromSeconds(10),
-        };
-
-        for (var attempt = 0; ; attempt++)
-        {
-            try
-            {
-                return await action();
-            }
-            catch (MaxBotClientException ex) when (IsAttachmentNotReady(ex) && attempt < retryDelays.Length)
-            {
-                var delay = retryDelays[attempt];
-                Write($"{message}, повтор через {delay.TotalSeconds:0} сек...");
-                await Task.Delay(delay);
-            }
-        }
-    }
-
-    private static bool IsAttachmentNotReady(MaxBotClientException ex) =>
-        ex.Message.Contains("attachment.not.ready", StringComparison.OrdinalIgnoreCase) ||
-        ex.Message.Contains("not.processed", StringComparison.OrdinalIgnoreCase);
-
     private static string GetProjectDirectory()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
@@ -643,55 +583,8 @@ sealed class TempSession : IAsyncDisposable
         _logWriter.WriteLine(line);
     }
 
-    public async Task SaveJsonAsync(string relativePath, object value)
-    {
-        var fullPath = Path.Combine(SessionDirectory, relativePath);
-        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-
-        var json = JsonSerializer.Serialize(value, JsonOptions);
-        await File.WriteAllTextAsync(fullPath, json);
-        Log($"  сохранено: {relativePath}");
-    }
-
-    public async Task<string?> TryDownloadAsync(string baseFileName, string? url, string? preferredFileName = null, string defaultExtension = ".bin")
-    {
-        if (string.IsNullOrWhiteSpace(url))
-            return null;
-
-        try
-        {
-            var extension = !string.IsNullOrWhiteSpace(preferredFileName)
-                ? Path.GetExtension(preferredFileName)
-                : Path.GetExtension(new Uri(url).AbsolutePath);
-
-            if (string.IsNullOrWhiteSpace(extension))
-                extension = defaultExtension;
-
-            var fileName = $"{baseFileName}{extension}";
-            var fullPath = Path.Combine(AttachmentsDirectory, fileName);
-            var bytes = await _httpClient.GetByteArrayAsync(url);
-            await File.WriteAllBytesAsync(fullPath, bytes);
-            Log($"  скачано: attachments/{fileName}");
-            return $"attachments/{fileName}";
-        }
-        catch (Exception ex)
-        {
-            Log($"  не удалось скачать {url}: {ex.Message}");
-            return null;
-        }
-    }
-
-    public static string ToSafeFileName(string? value, string? suffix = null)
-    {
-        var source = string.IsNullOrWhiteSpace(value) ? "message" : value;
-        var invalidChars = Path.GetInvalidFileNameChars();
-        var safe = new string(source.Select(ch => invalidChars.Contains(ch) ? '_' : ch).ToArray());
-        return string.IsNullOrWhiteSpace(suffix) ? safe : $"{safe}_{suffix}";
-    }
-
     public async ValueTask DisposeAsync()
     {
-        _httpClient.Dispose();
         await _logWriter.DisposeAsync();
         if (ReferenceEquals(Current, this))
             Current = null;

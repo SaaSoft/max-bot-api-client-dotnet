@@ -1,10 +1,13 @@
 ﻿using System.Globalization;
+using System.Net;
 using System.Net.Http.Headers;
 using MAX.Bot.Exceptions;
 using MAX.Bot.Interfaces;
 using MAX.Bot.Interfaces.Models;
+using MAX.Bot.Interfaces.Models.Attachment;
 using MAX.Bot.Interfaces.Models.Request;
 using MAX.Bot.Interfaces.Models.Request.Message;
+using MAX.Bot.Interfaces.Models.Request.Message.Attachment;
 using MAX.Bot.Interfaces.Models.Response;
 using static MAX.Bot.FrameworkSpecificMethods;
 
@@ -12,12 +15,35 @@ namespace MAX.Bot;
 
 public class MaxBotClient : IMaxBotClient
 {
+    private static readonly JsonSerializerOptions DeserializeOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        AllowOutOfOrderMetadataProperties = true,
+    };
+
+    private static readonly JsonSerializerOptions SerializeOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        AllowOutOfOrderMetadataProperties = true,
+    };
+
+    private static readonly HttpClient DownloadHttpClient = new();
+
     private readonly HttpClient _httpClient;
+    private readonly AttachmentRetryOptions _attachmentRetryOptions;
     private readonly string _baseUrl = "https://platform-api2.max.ru";
 
     public CancellationToken GlobalCancelToken { get; }
 
-    public MaxBotClient(string token, HttpClient httpClient, CancellationToken cancellationToken = default)
+    public AttachmentRetryOptions AttachmentRetryOptions => _attachmentRetryOptions;
+
+    public MaxBotClient(
+        string token,
+        HttpClient httpClient,
+        AttachmentRetryOptions? attachmentRetryOptions = null,
+        CancellationToken cancellationToken = default)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
 
@@ -26,10 +52,15 @@ public class MaxBotClient : IMaxBotClient
         if (!_httpClient.DefaultRequestHeaders.Contains("Authorization"))
             _httpClient.DefaultRequestHeaders.Add("Authorization", token);
 
+        _attachmentRetryOptions = attachmentRetryOptions ?? new AttachmentRetryOptions();
         GlobalCancelToken = cancellationToken;
     }
 
-    public MaxBotClient(string token, int timeoutSeconds = 30, CancellationToken cancellationToken = default)
+    public MaxBotClient(
+        string token,
+        int timeoutSeconds = 30,
+        AttachmentRetryOptions? attachmentRetryOptions = null,
+        CancellationToken cancellationToken = default)
     {
         _httpClient = new HttpClient
         {
@@ -39,6 +70,7 @@ public class MaxBotClient : IMaxBotClient
 
         _httpClient.DefaultRequestHeaders.Add("Authorization", token);
 
+        _attachmentRetryOptions = attachmentRetryOptions ?? new AttachmentRetryOptions();
         GlobalCancelToken = cancellationToken;
     }
 
@@ -50,7 +82,7 @@ public class MaxBotClient : IMaxBotClient
 
         if (data != null && (method == HttpMethod.Post || method == HttpMethod.Put || method == HttpMethod_Patch))
         {
-            var json = JsonSerializer.Serialize(data, MaxBotJsonSerializerOptions.Serialize);
+            var json = JsonSerializer.Serialize(data, SerializeOptions);
             request.Content = new StringContent(json, Encoding.UTF8, "application/json");
         }
 
@@ -65,7 +97,7 @@ public class MaxBotClient : IMaxBotClient
                 response.StatusCode);
         }
 
-        return JsonSerializer.Deserialize<T>(responseContent, MaxBotJsonSerializerOptions.Deserialize)
+        return JsonSerializer.Deserialize<T>(responseContent, DeserializeOptions)
             ?? throw new InvalidOperationException("Не удалось десериализовать ответ");
     }
 
@@ -75,7 +107,10 @@ public class MaxBotClient : IMaxBotClient
             HttpMethod.Get, "/me", null, cancellationToken);
     }
 
-    public async Task<SendMessageResponse> SendMessageAsync(SendMessageRequest request, CancellationToken cancellationToken = default)
+    public async Task<SendMessageResponse> SendMessageAsync(
+        SendMessageRequest request,
+        AttachmentRetryOptions? retryOptions = null,
+        CancellationToken cancellationToken = default)
     {
         var queryParams = new List<string>();
 
@@ -90,9 +125,23 @@ public class MaxBotClient : IMaxBotClient
 
         var queryString = queryParams.Any() ? $"?{string.Join("&", queryParams)}" : "";
 
-        return await SendRequestAsync<SendMessageResponse>(
+        var send = () => SendRequestAsync<SendMessageResponse>(
             HttpMethod.Post, $"/messages{queryString}", request, cancellationToken);
+
+        if (RequiresAttachmentRetry(request))
+        {
+            return await RetryWhileAttachmentNotReadyAsync(
+                send,
+                retryOptions,
+                cancellationToken);
+        }
+
+        return await send();
     }
+
+    private static bool RequiresAttachmentRetry(SendMessageRequest request) =>
+        request.Attachments?.Any(static a =>
+            a is ImageAttachment or VideoAttachment or FileAttachment or AudioAttachment) == true;
 
     public async Task<BaseResponse> AnswerCallbackAsync(
         AnswerCallbackRequest request,
@@ -142,24 +191,220 @@ public class MaxBotClient : IMaxBotClient
         return await SendRequestAsync<Message>(HttpMethod.Get, $"/messages/{messageId}", null, cancellationToken);
     }
 
-    public async Task<VideoInfoResponse> GetVideoAsync(string videoToken, CancellationToken cancellationToken = default)
+    public async Task<VideoInfoResponse> GetVideoAsync(
+        string videoToken,
+        AttachmentRetryOptions? retryOptions = null,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateVideoToken(videoToken);
+
+        return await RetryWhileAttachmentNotReadyAsync(
+            () => GetVideoInfoAsync(videoToken, cancellationToken),
+            retryOptions,
+            cancellationToken);
+    }
+
+    private static void ValidateVideoToken(string videoToken)
     {
         if (string.IsNullOrWhiteSpace(videoToken))
             throw new ArgumentException("Токен видео-вложения не должен быть пустым.", nameof(videoToken));
 
         if (!IsVideoTokenValid(videoToken))
             throw new ArgumentException("Токен видео-вложения может содержать только латинские буквы, цифры, '_' и '-'.", nameof(videoToken));
+    }
 
-        return await SendRequestAsync<VideoInfoResponse>(
+    private Task<VideoInfoResponse> GetVideoInfoAsync(string videoToken, CancellationToken cancellationToken) =>
+        SendRequestAsync<VideoInfoResponse>(
             HttpMethod.Get,
             $"/videos/{Uri.EscapeDataString(videoToken)}",
             null,
             cancellationToken);
+
+    public async Task<string?> TryGetAttachmentDownloadUrlAsync(
+        Attachment attachment,
+        VideoQuality videoQuality = VideoQuality.Mp4_480,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException_ThrowIfNull(attachment);
+
+        try
+        {
+            return await GetAttachmentDownloadUrlAsync(attachment, videoQuality, cancellationToken);
+        }
+        catch (MaxBotClientException ex) when (ex.IsAttachmentNotReady)
+        {
+            return null;
+        }
     }
 
-    public async Task<BaseResponse> EditMessageByIdAsync(string messageId, SendMessageRequest messageRequest, CancellationToken cancellationToken = default)
+    public async Task<AttachmentDownloadResult> DownloadAttachmentAsync(
+        Attachment attachment,
+        DownloadAttachmentOptions? options = null,
+        CancellationToken cancellationToken = default)
     {
-        return await SendRequestAsync<BaseResponse>(HttpMethod.Put, $"/messages?message_id={messageId}", messageRequest, cancellationToken);
+        ArgumentNullException_ThrowIfNull(attachment);
+        options ??= new DownloadAttachmentOptions();
+
+        var maxAttempts = Math.Max(1, options.MaxAttempts);
+
+        string? url = null;
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            url = await TryGetAttachmentDownloadUrlAsync(attachment, options.VideoQuality, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(url))
+                break;
+
+            if (attempt < maxAttempts - 1)
+                await Task.Delay(options.RetryDelay, cancellationToken);
+        }
+
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            throw new MaxBotClientException(
+                "Вложение ещё не готово к скачиванию или URL недоступен.",
+                HttpStatusCode.ServiceUnavailable,
+                isAttachmentNotReady: true);
+        }
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, GlobalCancelToken);
+#if NET462
+        var content = await DownloadHttpClient.GetByteArrayAsync(url).ConfigureAwait(false);
+#else
+        var content = await DownloadHttpClient.GetByteArrayAsync(url, cts.Token);
+#endif
+        var fileName = ResolveDownloadFileName(options, url, attachment);
+
+        if (string.IsNullOrWhiteSpace(options.FilePath))
+        {
+            return new AttachmentDownloadResult
+            {
+                Content = content,
+                FileName = fileName,
+            };
+        }
+
+        var savedFilePath = ResolveSavedFilePath(options.FilePath, url, attachment, options.DefaultExtension);
+        var directory = Path.GetDirectoryName(savedFilePath);
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+
+#if NET462
+        File.WriteAllBytes(savedFilePath, content);
+#else
+        await File.WriteAllBytesAsync(savedFilePath, content, cts.Token);
+#endif
+
+        return new AttachmentDownloadResult
+        {
+            SavedFilePath = savedFilePath,
+            FileName = Path.GetFileName(savedFilePath),
+        };
+    }
+
+    private static string ResolveDownloadFileName(
+        DownloadAttachmentOptions options,
+        string url,
+        Attachment attachment)
+    {
+        var preferredFileName = attachment.GetFileName();
+        if (!string.IsNullOrWhiteSpace(preferredFileName))
+            return preferredFileName;
+
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            var fileName = Path.GetFileName(uri.AbsolutePath);
+            if (!string.IsNullOrWhiteSpace(fileName))
+                return fileName;
+        }
+
+        var extension = options.DefaultExtension ?? GetDefaultExtension(attachment) ?? ".bin";
+        if (!extension.StartsWith('.'))
+            extension = "." + extension;
+
+        return $"download{extension}";
+    }
+
+    private static string ResolveSavedFilePath(
+        string filePath,
+        string url,
+        Attachment attachment,
+        string? defaultExtension)
+    {
+        if (HasRecognizedFileExtension(filePath))
+            return filePath;
+
+        var extension = Path.GetExtension(attachment.GetFileName() ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(extension) && Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            extension = Path.GetExtension(uri.AbsolutePath);
+        if (string.IsNullOrWhiteSpace(extension))
+            extension = defaultExtension ?? GetDefaultExtension(attachment) ?? ".bin";
+        if (!extension.StartsWith('.'))
+            extension = "." + extension;
+
+        return filePath + extension;
+    }
+
+    private static bool HasRecognizedFileExtension(string filePath)
+    {
+        var extension = Path.GetExtension(filePath);
+        if (string.IsNullOrEmpty(extension) || extension.Length < 2 || extension.Length > 11)
+            return false;
+
+        for (var i = 1; i < extension.Length; i++)
+        {
+            if (!char.IsLetterOrDigit(extension[i]))
+                return false;
+        }
+
+        return true;
+    }
+
+    private static string? GetDefaultExtension(Attachment attachment) => attachment switch
+    {
+        ImageAttachment => ".jpg",
+        VideoAttachment => ".mp4",
+        FileAttachment => ".bin",
+        _ => null,
+    };
+
+    private async Task<string?> GetAttachmentDownloadUrlAsync(
+        Attachment attachment,
+        VideoQuality videoQuality,
+        CancellationToken cancellationToken)
+    {
+        switch (attachment)
+        {
+            case ImageAttachment image:
+                return image.Payload.Url;
+            case FileAttachment file:
+                return file.Payload.Url;
+            case VideoAttachment video:
+                return (await GetVideoInfoAsync(video.Payload.Token, cancellationToken))
+                    .TryGetDownloadUrl(videoQuality);
+            default:
+                throw new NotSupportedException(
+                    $"Скачивание не поддерживается для вложения типа {attachment.GetType().Name}.");
+        }
+    }
+
+    public async Task<BaseResponse> EditMessageByIdAsync(
+        string messageId,
+        SendMessageRequest messageRequest,
+        AttachmentRetryOptions? retryOptions = null,
+        CancellationToken cancellationToken = default)
+    {
+        var edit = () => SendRequestAsync<BaseResponse>(
+            HttpMethod.Put, $"/messages?message_id={messageId}", messageRequest, cancellationToken);
+
+        if (RequiresAttachmentRetry(messageRequest))
+        {
+            return await RetryWhileAttachmentNotReadyAsync(
+                edit,
+                retryOptions,
+                cancellationToken);
+        }
+
+        return await edit();
     }
 
     public async Task<BaseResponse> DeleteMessageByIdAsync(string messageId, CancellationToken cancellationToken = default)
@@ -549,7 +794,7 @@ public class MaxBotClient : IMaxBotClient
                 $"API MAX вернул не JSON-ответ после загрузки файла: {CreateResponsePreview(responseContent)}");
         }
 
-        return JsonSerializer.Deserialize<UploadResponse>(responseContent, MaxBotJsonSerializerOptions.Deserialize)
+        return JsonSerializer.Deserialize<UploadResponse>(responseContent, DeserializeOptions)
             ?? throw new InvalidOperationException("Не удалось десериализовать ответ загрузки файла");
     }
 
@@ -590,6 +835,27 @@ public class MaxBotClient : IMaxBotClient
     {
         var trimmed = responseContent.TrimStart();
         return trimmed.StartsWith('{') || trimmed.StartsWith('[');
+    }
+
+    private async Task<T> RetryWhileAttachmentNotReadyAsync<T>(
+        Func<Task<T>> action,
+        AttachmentRetryOptions? retryOptions,
+        CancellationToken cancellationToken)
+    {
+        var options = retryOptions ?? _attachmentRetryOptions;
+        var maxAttempts = Math.Max(1, options.MaxAttempts);
+
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return await action();
+            }
+            catch (MaxBotClientException ex) when (ex.IsAttachmentNotReady && attempt < maxAttempts - 1)
+            {
+                await Task.Delay(options.RetryDelay, cancellationToken);
+            }
+        }
     }
 
     private static bool IsVideoTokenValid(string videoToken)
