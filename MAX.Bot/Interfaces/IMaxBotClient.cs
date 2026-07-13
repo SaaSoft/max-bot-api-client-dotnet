@@ -1,6 +1,8 @@
 ﻿using MAX.Bot.Interfaces.Models;
+using MAX.Bot.Interfaces.Models.Attachment;
 using MAX.Bot.Interfaces.Models.Request;
 using MAX.Bot.Interfaces.Models.Request.Message;
+using MAX.Bot.Interfaces.Models.Request.Message.Attachment;
 using MAX.Bot.Interfaces.Models.Response;
 
 namespace MAX.Bot.Interfaces;
@@ -18,12 +20,16 @@ public interface IMaxBotClient
     Task<User> GetMeAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Отправить сообщение
+    /// Отправить сообщение. При отправке с upload-вложениями автоматически повторяет запрос, если API возвращает ошибку «вложение ещё обрабатывается».
     /// </summary>
     /// <param name="request">Запрос на отправку сообщения</param>
+    /// <param name="retryOptions">Параметры повторных попыток. Если не указаны, используются настройки клиента.</param>
     /// <param name="cancellationToken">Токен отмены операции</param>
     /// <returns>Ответ с отправленным сообщением</returns>
-    Task<SendMessageResponse> SendMessageAsync(SendMessageRequest request, CancellationToken cancellationToken = default);
+    Task<SendMessageResponse> SendMessageAsync(
+        SendMessageRequest request,
+        AttachmentRetryOptions? retryOptions = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Ответить на callback после нажатия пользователем кнопки
@@ -81,28 +87,61 @@ public interface IMaxBotClient
     Task<Message> GetMessageByIdAsync(string messageId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Получить информацию о видео по токену вложения
+    /// Получить информацию о видео по токену вложения. Автоматически повторяет запрос, если видео ещё обрабатывается.
     /// </summary>
     /// <param name="videoToken">Токен видео-вложения</param>
+    /// <param name="retryOptions">Параметры повторных попыток. Если не указаны, используются настройки клиента.</param>
     /// <param name="cancellationToken">Токен отмены операции</param>
     /// <returns>Информация о видео</returns>
-    Task<VideoInfoResponse> GetVideoAsync(string videoToken, CancellationToken cancellationToken = default);
+    Task<VideoInfoResponse> GetVideoAsync(
+        string videoToken,
+        AttachmentRetryOptions? retryOptions = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Отредактировать(изменить) сообщение по идентификатору
+    /// Возвращает URL для скачивания вложения или null, если оно ещё не готово.
+    /// </summary>
+    /// <param name="attachment">Вложение из тела сообщения</param>
+    /// <param name="videoQuality">Качество видео. Используется только для <see cref="VideoAttachment"/>.</param>
+    /// <param name="cancellationToken">Токен отмены операции</param>
+    /// <returns>URL для скачивания или null, если вложение ещё обрабатывается</returns>
+    Task<string?> TryGetAttachmentDownloadUrlAsync(
+        Attachment attachment,
+        VideoQuality videoQuality = VideoQuality.Mp4_480,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Скачать вложение: получить содержимое в память или сохранить на диск.
+    /// </summary>
+    /// <param name="attachment">Вложение из тела сообщения</param>
+    /// <param name="options">Параметры скачивания и повторных попыток</param>
+    /// <param name="cancellationToken">Токен отмены операции</param>
+    /// <returns>Результат с содержимым файла или путём к сохранённому файлу</returns>
+    Task<AttachmentDownloadResult> DownloadAttachmentAsync(
+        Attachment attachment,
+        DownloadAttachmentOptions? options = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Отредактировать(изменить) сообщение по идентификатору. При редактировании с upload-вложениями автоматически повторяет запрос, если API возвращает ошибку «вложение ещё обрабатывается».
     /// </summary>
     /// <param name="messageId">Идентификатор редактируемого сообщения</param>
     /// <param name="messageRequest">Новое сообщение</param>
+    /// <param name="retryOptions">Параметры повторных попыток. Если не указаны, используются настройки клиента.</param>
     /// <param name="cancellationToken">Токен отмены операции</param>
-    /// <returns>Сообщение</returns>
-    Task<BaseResponse> EditMessageByIdAsync(string messageId, SendMessageRequest messageRequest, CancellationToken cancellationToken = default);
+    /// <returns>Базовый ответ операции</returns>
+    Task<BaseResponse> EditMessageByIdAsync(
+        string messageId,
+        SendMessageRequest messageRequest,
+        AttachmentRetryOptions? retryOptions = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Удалить сообщение по идентификатору
     /// </summary>
     /// <param name="messageId">Идентификатор сообщения</param>
     /// <param name="cancellationToken">Токен отмены операции</param>
-    /// <returns>Сообщение</returns>
+    /// <returns>Базовый ответ операции</returns>
     Task<BaseResponse> DeleteMessageByIdAsync(string messageId, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -237,7 +276,6 @@ public interface IMaxBotClient
     /// <param name="cancellationToken">Токен отмены операции</param>
     /// <returns>Базовый ответ операции</returns>
     Task<BaseResponse> AddChatMemberAsync(AddChatMemberRequest request, CancellationToken cancellationToken = default);
-
 
     /// <summary>
     /// Загрузить файл и получить токен вложения

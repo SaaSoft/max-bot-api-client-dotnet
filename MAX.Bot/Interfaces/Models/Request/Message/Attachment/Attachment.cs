@@ -15,15 +15,12 @@ public abstract class Attachment
 {
     [JsonPropertyName("payload")]
     public AttachmentPayload? Payload { get; set; }
+
+    /// <summary>
+    /// Возвращает предпочтительное имя файла для скачивания вложения.
+    /// </summary>
+    public virtual string? GetFileName() =>
+        this is FileAttachment file ? file.Filename : null;
 }
 
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
-[JsonDerivedType(typeof(InlineKeyboardPayload), "inline_keyboard")]
-[JsonDerivedType(typeof(VideoPayload), "video")]
-[JsonDerivedType(typeof(ImagePayload), "image")]
-[JsonDerivedType(typeof(AudioPayload), "audio")]
-[JsonDerivedType(typeof(FilePayload), "file")]
-[JsonDerivedType(typeof(StickerPayload), "sticker")]
-[JsonDerivedType(typeof(ContactPayload), "contact")]
-[JsonDerivedType(typeof(LocationPayload), "location")]
 public abstract class AttachmentPayload { }

@@ -6,7 +6,8 @@
 
 - ✅ **Долгосрочный polling** — обработка событий в реальном времени
 - ✅ **Dependency Injection** — готовая интеграция с ASP.NET Core
-- ✅ **Гибкая конфигурация** — несколько способов создания клиента
+- ✅ **Вложения** — скачивание image/video/file, выбор качества видео
+- ✅ **Повторы** — автоматические retry при обработке вложений API
 
 ## Установка
 
@@ -22,8 +23,14 @@ dotnet add package SaaSoft.MAX.Bot
 
 ### Через PackageReference
 ```xml
-<PackageReference Include="SaaSoft.MAX.Bot" Version="1.1.0" />
+<PackageReference Include="SaaSoft.MAX.Bot" Version="1.2.0" />
 ```
+
+### Сертификаты Минцифры
+
+API MAX работает на `https://platform-api2.max.ru` и использует TLS-сертификаты Национального удостоверяющего центра Минцифры (Russian Trusted CA). Этого корневого сертификата нет в стандартном хранилище доверенных CA Windows и .NET, поэтому без его установки запросы могут завершаться ошибкой SSL/TLS.
+
+Добавьте сертификаты Минцифры в доверенные на машине, где запускается бот (Windows, Linux или сервер). Инструкция и файлы сертификатов — на портале Госуслуг: [gosuslugi.ru/crt](https://www.gosuslugi.ru/crt).
 
 ## Быстрый старт
 
@@ -54,7 +61,7 @@ await botClient.SendMessageAsync(new SendMessageRequest
 });
 
 // Получение обновлений
-var _ = maxApiClient.PollUpdatesWithCallback(
+var _ = botClient.PollUpdatesWithCallback(
     async (update, client) =>
     {
         if (update is MessageCreatedUpdate messageCreated)
@@ -79,11 +86,14 @@ var _ = maxApiClient.PollUpdatesWithCallback(
 ### 1. Простой конструктор (рекомендуется для консольных приложений)
 
 ```csharp
+using MAX.Bot.Interfaces.Models.Attachment;
+
 // С токеном и таймаутом по умолчанию (30 секунд)
 var client = new MaxBotClient("your_token_here");
 
-// С кастомным таймаутом
-var client = new MaxBotClient("your_token_here", timeoutSeconds: 60);
+// С кастомным таймаутом и retry для вложений
+var client = new MaxBotClient("your_token_here", timeoutSeconds: 60,
+    attachmentRetryOptions: new AttachmentRetryOptions { MaxAttempts = 4, RetryDelay = TimeSpan.FromSeconds(2) });
 ```
 
 ### 2. Dependency Injection (рекомендуется для ASP.NET Core)
@@ -111,6 +121,45 @@ public class BotService
         });
     }
 }
+```
+
+## Скачивание файлов
+
+```csharp
+using MAX.Bot.Interfaces.Models.Attachment;
+using MAX.Bot.Interfaces.Models.Response;
+
+var message = await botClient.GetMessageByIdAsync("message_id");
+
+foreach (var attachment in message.Body?.Attachments ?? [])
+{
+    try
+    {
+        var result = await botClient.DownloadAttachmentAsync(attachment, new DownloadAttachmentOptions
+        {
+            FilePath = Path.Combine("downloads", message.Body!.Mid!),
+            VideoQuality = VideoQuality.Mp4_720,
+        });
+
+        Console.WriteLine($"Сохранено: {result.SavedFilePath}");
+    }
+    catch (NotSupportedException)
+    {
+        // sticker, keyboard и др. — скачивание не поддерживается
+    }
+}
+```
+
+Без `FilePath` содержимое возвращается в `result.Content`:
+
+```csharp
+var result = await botClient.DownloadAttachmentAsync(attachment, new DownloadAttachmentOptions
+{
+    VideoQuality = VideoQuality.Mp4_720,
+});
+
+var content = result.Content!;
+Console.WriteLine($"Получено {content.Length} байт");
 ```
 
 ## API методов

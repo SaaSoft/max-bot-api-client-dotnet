@@ -18,7 +18,7 @@ public record VideoInfoResponse
     /// URL-ы для скачивания или воспроизведения видео. Может быть null, если видео недоступно
     /// </summary>
     [JsonPropertyName("urls")]
-    public JsonElement? Urls { get; set; }
+    public VideoUrls? Urls { get; set; }
 
     /// <summary>
     /// Миниатюра видео
@@ -43,4 +43,10 @@ public record VideoInfoResponse
     /// </summary>
     [JsonPropertyName("duration")]
     public long Duration { get; set; }
+
+    /// <summary>
+    /// Возвращает URL для скачивания видео в выбранном качестве. По умолчанию — <see cref="VideoQuality.Mp4_480"/>.
+    /// </summary>
+    public string? TryGetDownloadUrl(VideoQuality quality = VideoQuality.Mp4_480) =>
+        Urls?.TryGetUrl(quality);
 }
