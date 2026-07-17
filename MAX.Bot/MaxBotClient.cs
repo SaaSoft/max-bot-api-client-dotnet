@@ -817,8 +817,9 @@ public class MaxBotClient : IMaxBotClient
         var token = request.Type switch
         {
             UploadType.Video or UploadType.Audio => uploadInfo.Token ?? uploadResponse.Token,
-            UploadType.Image or UploadType.File => uploadResponse.Token ?? uploadInfo.Token,
-            _ => null
+			UploadType.File => uploadResponse.Token ?? uploadInfo.Token,
+			UploadType.Image => uploadResponse.Photos?.Values?.FirstOrDefault()?.Token ?? uploadInfo.Token,
+			_ => null
         };
 
         if (!string.IsNullOrWhiteSpace(token))
