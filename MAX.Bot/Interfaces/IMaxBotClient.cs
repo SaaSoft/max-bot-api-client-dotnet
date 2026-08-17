@@ -20,6 +20,16 @@ public interface IMaxBotClient
     Task<User> GetMeAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Добавить, изменить или удалить команды бота. Чтобы удалить все команды, передайте пустой список.
+    /// </summary>
+    /// <param name="request">Запрос на редактирование команд</param>
+    /// <param name="cancellationToken">Токен отмены операции</param>
+    /// <returns>Актуальный список команд бота</returns>
+    Task<UpdateBotCommandsResponse> UpdateBotCommandsAsync(
+        UpdateBotCommandsRequest request,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Отправить сообщение. При отправке с upload-вложениями автоматически повторяет запрос, если API возвращает ошибку «вложение ещё обрабатывается».
     /// </summary>
     /// <param name="request">Запрос на отправку сообщения</param>

@@ -7,7 +7,7 @@
 		<Nullable>enable</Nullable>
 		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 		<PackageId>SaaSoft.MAX.Bot</PackageId>
-		<Version>1.2.1</Version>
+		<Version>1.2.2</Version>
 		<Company>SaaSoft</Company>
 		<Description>.NET клиент для работы с API мессенджера MAX. Библиотека предоставляет полный набор методов для взаимодействия с ботами, включая отправку сообщений, управление чатами и обработку событий в реальном времени.</Description>
 		<PackageTags>maxbot;api;client;chatbot;messenger</PackageTags>

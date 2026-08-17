@@ -40,7 +40,18 @@ try
 
     TempSession.Write("Вызываем GetMeAsync...");
     var me = await maxApiClient.GetMeAsync();
-    TempSession.Write($"Успех! Бот: {me.FirstName} (ID: {me.Id})");
+    TempSession.Write($"Успех! Бот: {me.FirstName} (ID: {me.Id}), команды: {string.Join(", ", me.Commands?.Select(c => c.Name) ?? [])}");
+
+    TempSession.Write("Вызываем UpdateBotCommandsAsync...");
+    var commandsResponse = await maxApiClient.UpdateBotCommandsAsync(new UpdateBotCommandsRequest
+    {
+        Commands = new List<BotCommand>
+        {
+            new() { Name = "start", Description = "Начать работу" },
+            new() { Name = "help", Description = "Справка" },
+        },
+    });
+    TempSession.Write($"Команды обновлены: {string.Join(", ", commandsResponse.Commands?.Select(c => c.Name) ?? [])}");
 
     TempSession.Write("Вызываем SendMessageAsync...");
     var sentMessageResponse = await maxApiClient.SendMessageAsync(new SendMessageRequest()

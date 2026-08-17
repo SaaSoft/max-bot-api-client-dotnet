@@ -65,4 +65,10 @@ public record User
     /// </summary>
     [JsonPropertyName("full_avatar_url")]
     public string? FullAvatarUrl { get; set; }
+
+    /// <summary>
+    /// Команды, поддерживаемые ботом. Возвращается при вызове GET /me
+    /// </summary>
+    [JsonPropertyName("commands")]
+    public List<BotCommand>? Commands { get; set; }
 }

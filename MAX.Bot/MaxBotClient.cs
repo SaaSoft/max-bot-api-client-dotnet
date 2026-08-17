@@ -107,6 +107,20 @@ public class MaxBotClient : IMaxBotClient
             HttpMethod.Get, "/me", null, cancellationToken);
     }
 
+    public async Task<UpdateBotCommandsResponse> UpdateBotCommandsAsync(
+        UpdateBotCommandsRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException_ThrowIfNull(request);
+        request.Validate();
+
+        return await SendRequestAsync<UpdateBotCommandsResponse>(
+            HttpMethod_Patch,
+            "/me/commands",
+            request,
+            cancellationToken);
+    }
+
     public async Task<SendMessageResponse> SendMessageAsync(
         SendMessageRequest request,
         AttachmentRetryOptions? retryOptions = null,
