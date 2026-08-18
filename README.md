@@ -23,7 +23,7 @@ dotnet add package SaaSoft.MAX.Bot
 
 ### Через PackageReference
 ```xml
-<PackageReference Include="SaaSoft.MAX.Bot" Version="1.2.0" />
+<PackageReference Include="SaaSoft.MAX.Bot" Version="1.2.2" />
 ```
 
 ### Сертификаты Минцифры
@@ -179,6 +179,7 @@ Console.WriteLine($"Получено {content.Length} байт");
 | Метод | Описание | Ссылка | Статус |
 |-------|----------|--------|--------|
 | GET | Получение информации о боте | `GET/me` | ✅ |
+| PATCH | Редактирование команд бота | `PATCH/me/commands` | ✅ |
 
 #### ✉️ Messages
 
